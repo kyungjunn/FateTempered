@@ -127,6 +127,10 @@ PrefabInstance:
       propertyPath: AnimatorParameterEntries.ParameterEntries.Array.data[4].ParameterType
       value: 9
       objectReference: {fileID: 0}
+    - target: {fileID: 4489286173372538429, guid: 2a4bbe959178e1d4393b6341b8072781, type: 3}
+      propertyPath: GlobalObjectIdHash
+      value: 3611581175
+      objectReference: {fileID: 0}
     - target: {fileID: 5763021708063854728, guid: 2a4bbe959178e1d4393b6341b8072781, type: 3}
       propertyPath: skillE
       value: 
@@ -202,6 +206,14 @@ PrefabInstance:
     - target: {fileID: 8147291056382947162, guid: 2a4bbe959178e1d4393b6341b8072781, type: 3}
       propertyPath: characterId
       value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 8604734872710818753, guid: 2a4bbe959178e1d4393b6341b8072781, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8604734872710818753, guid: 2a4bbe959178e1d4393b6341b8072781, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8888413459189353256, guid: 2a4bbe959178e1d4393b6341b8072781, type: 3}
       propertyPath: m_Name

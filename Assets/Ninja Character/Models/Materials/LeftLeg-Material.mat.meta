@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: ef462d07f7f014e4783dbb081da80aa5
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 220011
+  packageName: 3D Voxel Model - Ninja Character
+  packageVersion: 1.2
+  assetPath: Assets/Ninja Character/Models/Materials/LeftLeg-Material.mat
+  uploadId: 709076

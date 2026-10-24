@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: f0f49e5bdcd5a8e49adc734f83eadb17
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 220011
+  packageName: 3D Voxel Model - Ninja Character
+  packageVersion: 1.2
+  assetPath: Assets/Ninja Character/Models/Materials/ChestA-Material.mat
+  uploadId: 709076

@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: f068726cf2f75c24cad668d3cffd68cc
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 220011
+  packageName: 3D Voxel Model - Ninja Character
+  packageVersion: 1.2
+  assetPath: Assets/Ninja Character/Prefabs/Ninja.prefab
+  uploadId: 709076

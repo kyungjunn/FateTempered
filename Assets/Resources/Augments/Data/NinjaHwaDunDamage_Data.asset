@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 71d2c4f6a8b0493e9c1d5e7f2a6b8c04, type: 3}
+  m_Name: NinjaHwaDunDamage_Data
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCombatAugmentSO
+  augmentName: 고열
+  description: "화둔 피해 +20%. 최대 3중첩, 증가율 합산."
+  icon: {fileID: 21300000, guid: b1429b848032b43068776687c7c978ee, type: 3}
+  rarity: 1
+  weight: 30
+  skillResourcePath: Augments/Skills/PlayerCombatAugment
+  maxStacks: 3
+  requiredCharacter: 1
+  effect: 1
+  targetSkill: {fileID: 11400000, guid: c9e6a31d4f0b508c1e3d7f5a9b2c4e6d, type: 2}
+  value: 0.2
+  spreadDegrees: 0

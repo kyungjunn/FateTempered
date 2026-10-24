@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 76801aa511abdee458fe90e61a0772c8
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 220011
+  packageName: 3D Voxel Model - Ninja Character
+  packageVersion: 1.2
+  assetPath: Assets/Ninja Character/Models/Materials/RightHand-Material.mat
+  uploadId: 709076

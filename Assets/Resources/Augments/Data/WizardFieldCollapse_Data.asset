@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 71d2c4f6a8b0493e9c1d5e7f2a6b8c04, type: 3}
+  m_Name: WizardFieldCollapse_Data
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCombatAugmentSO
+  augmentName: 붕괴 공식
+  description: "마법진 자연 만료 시 내부 적에게 공격력 150% 폭발. 최대 2중첩, 합산. 교체·사망·박탈 제거는 폭발하지 않음."
+  icon: {fileID: 21300000, guid: b29625940d224b4fef4f397682c2b287, type: 3}
+  rarity: 2
+  weight: 15
+  skillResourcePath: Augments/Skills/PlayerCombatAugment
+  maxStacks: 2
+  requiredCharacter: 2
+  effect: 13
+  targetSkill: {fileID: 11400000, guid: 8f076d10ee1ce044b9b0c1ccde52b860, type: 2}
+  value: 1.5
+  spreadDegrees: 0

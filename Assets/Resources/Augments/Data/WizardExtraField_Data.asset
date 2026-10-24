@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 71d2c4f6a8b0493e9c1d5e7f2a6b8c04, type: 3}
+  m_Name: WizardExtraField_Data
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCombatAugmentSO
+  augmentName: 이중 각인
+  description: "마법진 최대 유지 개수 +1. 최대 1중첩. 초과·박탈 시 오래된 마법진부터 폭발 없이 제거."
+  icon: {fileID: 21300000, guid: 89c0c63013bf94a6d8d6472b21085faf, type: 3}
+  rarity: 2
+  weight: 15
+  skillResourcePath: Augments/Skills/PlayerCombatAugment
+  maxStacks: 1
+  requiredCharacter: 2
+  effect: 12
+  targetSkill: {fileID: 11400000, guid: 8f076d10ee1ce044b9b0c1ccde52b860, type: 2}
+  value: 1
+  spreadDegrees: 0

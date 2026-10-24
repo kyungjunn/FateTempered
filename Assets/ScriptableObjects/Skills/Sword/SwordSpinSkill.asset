@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 607e0a88df03917429d7582fc280822c, type: 3}
+  m_Name: SwordSpinSkill
+  m_EditorClassIdentifier: Assembly-CSharp::SwordSpinSkillSO
+  icon: {fileID: 21300000, guid: 808a682dd498fa243a8dc75a3ae6b3ea, type: 3}
+  cooldown: 4
+  animationTrigger: SkillQ
+  radius: 3.8
+  slashAngle: 180
+  damageMultiplier: 2
+  centerOffset: {x: 0, y: 0.8, z: 0}
+  enemyLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  hitDelay: 0.18
+  castDuration: 0.52
+  animationSpeed: 2.6
+  spinVfxPrefab: {fileID: 0}
+  playOriginalSpinVfx: 0
+  vfxOffset: {x: 0, y: 0.8, z: 0}
+  spinVfxScale: 1.5
+  slashVfxPrefab: {fileID: 3367314013316085171, guid: 8b20002c2b69a9d44ab5bae8e1d923cd, type: 3}
+  slashVfxOffset: {x: 0, y: 0.15, z: 0}
+  slashVfxScale: 1.5
+  vfxLifetime: 1.6
+  hitVfxPrefab: {fileID: 7856939199014537196, guid: 212ef1a41838ce044a9ac54994866708, type: 3}
+  hitVfxScale: 1
+  cameraShake: 0.12
+  swingSfx: {fileID: 8300000, guid: 76fec2fb6f5b84898b881413995e1d88, type: 3}
+  impactSfx: {fileID: 0}
+  showSlashRing: 1
+  ringColor: {r: 0.22, g: 0.78, b: 1, a: 0.9}
+  ringDuration: 0.28
+  ringWidth: 0.22

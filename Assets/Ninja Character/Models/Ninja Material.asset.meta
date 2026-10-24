@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: b43a38ed2637152419f2e3fc2d4acc06
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 220011
+  packageName: 3D Voxel Model - Ninja Character
+  packageVersion: 1.2
+  assetPath: Assets/Ninja Character/Models/Ninja Material.asset
+  uploadId: 709076

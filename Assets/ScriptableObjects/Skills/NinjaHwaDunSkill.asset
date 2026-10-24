@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c4e19b2d8f4e6a9c1b5d3e7f0a2c4b, type: 3}
+  m_Name: NinjaHwaDunSkill
+  m_EditorClassIdentifier: Assembly-CSharp::NinjaHwaDunSkillSO
+  icon: {fileID: 21300000, guid: e1c3c25782a016e408dbcea1ee592702, type: 3}
+  cooldown: 6
+  animationTrigger: SkillQ
+  flamethrowerPrefab: {fileID: 163286, guid: 50daa816369323b42b56093bb108296f, type: 3}
+  duration: 2
+  tickInterval: 0.25
+  damageMultiplier: 1
+  hitboxSize: {x: 1.2, y: 1.2, z: 6}
+  hitboxCenter: {x: 0, y: 0, z: 3}

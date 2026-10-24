@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ba8ba2b559cd8e478e3aa0627a8c94d, type: 3}
+  m_Name: SwordUltimateSlash
+  m_EditorClassIdentifier: Assembly-CSharp::SwordUltimateSlashSO
+  icon: {fileID: 21300000, guid: 097e573cbea13584aa113fe8192c11ed, type: 3}
+  cooldown: 0
+  animationTrigger: UltimateR
+  radius: 7
+  damageMultiplier: 4
+  attackCenterOffset: {x: 0, y: 0.8, z: 0}
+  enemyLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  slashCount: 4
+  slashInterval: 0.24
+  impactDelay: 0.12
+  recoveryTime: 0.16
+  slashAnimationSpeed: 5.5
+  slashVfxPrefab: {fileID: 689667626583958020, guid: 1336648bc1d8baf46a4515860950c9d4, type: 3}
+  slashVfxOffset: {x: 0, y: 0.15, z: 0}
+  slashVfxScale: 2.2
+  finalSlashScale: 1.3
+  hitVfxPrefab: {fileID: 7856939199014537196, guid: 212ef1a41838ce044a9ac54994866708, type: 3}
+  hitVfxScale: 1
+  vfxLifetime: 2
+  swingSfx: {fileID: 8300000, guid: 76fec2fb6f5b84898b881413995e1d88, type: 3}
+  impactSfx: {fileID: 8300000, guid: 38e779b7f269c41bd8bf6c6f53c552be, type: 3}

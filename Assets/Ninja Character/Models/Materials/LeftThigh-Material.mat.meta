@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 9bd0b5bb2fd5add498f9932eb4f3e500
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 220011
+  packageName: 3D Voxel Model - Ninja Character
+  packageVersion: 1.2
+  assetPath: Assets/Ninja Character/Models/Materials/LeftThigh-Material.mat
+  uploadId: 709076

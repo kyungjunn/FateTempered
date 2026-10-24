@@ -50,6 +50,7 @@ public class SpawnManager : MonoBehaviour
     private PlayerLevelSystem playerLevelSystem;
     private Coroutine enemySpawnRoutine;
     private float spawnStartTime;
+    private bool sessionEnded;
 
     public GameObject SpawnedPlayer => spawnedPlayer;
 
@@ -92,20 +93,33 @@ public class SpawnManager : MonoBehaviour
         UnbindPlayerLevelSystem();
     }
 
+    public void EndSession()
+    {
+        if (sessionEnded) return;
+        sessionEnded = true;
+        StopEnemyAutoSpawn();
+        UnbindPlayerLevelSystem();
+        ResetEnemyUnlockSpawns();
+        enemySpawnPoints.Clear();
+    }
+
     public void SpawnAll()
     {
+        if (sessionEnded) return;
         // 맵 씬 로드가 끝난 뒤 플레이어와 적 스폰을 한 번에 초기화
         spawnStartTime = Time.time;
         ResetEnemyUnlockSpawns();
-        if (!SpawnPlayer()) return;
+        if (!SpawnPlayer() || sessionEnded) return;
         CacheEnemySpawnPoints();
         SpawnInitialEnemies();
+        if (sessionEnded) return;
         StartEnemyAutoSpawn();
         TrySpawnUnlockEnemies();
     }
 
     private bool SpawnPlayer()
     {
+        if (sessionEnded) return false;
         if (spawnedPlayer != null) return true;
 
         if (playerPrefab == null || !playerPrefab.TryGetComponent(out PlayerCharacter character)
@@ -134,6 +148,7 @@ public class SpawnManager : MonoBehaviour
 
     private void CacheEnemySpawnPoints()
     {
+        if (sessionEnded) return;
         enemySpawnPoints.Clear();
 
         // Map 씬에 배치된 EnemySpawnPoint 태그 오브젝트를 캐싱
@@ -157,7 +172,7 @@ public class SpawnManager : MonoBehaviour
     public bool TrySpawnQuestEnemy(GameObject prefab, out GameObject enemy)
     {
         enemy = null;
-        if (prefab == null) return false;
+        if (sessionEnded || prefab == null) return false;
         if (enemySpawnPoints.Count == 0) CacheEnemySpawnPoints();
         if (enemySpawnPoints.Count == 0) return false;
 
@@ -178,7 +193,7 @@ public class SpawnManager : MonoBehaviour
 
     private void SpawnInitialEnemies()
     {
-        if (!spawnEnemiesOnStart || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
+        if (sessionEnded || !spawnEnemiesOnStart || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
         {
             return;
         }
@@ -218,7 +233,7 @@ public class SpawnManager : MonoBehaviour
 
     private void StartEnemyAutoSpawn()
     {
-        if (!enableEnemyAutoSpawn || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
+        if (sessionEnded || !enableEnemyAutoSpawn || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
         {
             return;
         }
@@ -240,9 +255,10 @@ public class SpawnManager : MonoBehaviour
 
     private IEnumerator EnemySpawnRoutine()
     {
-        while (true)
+        while (!sessionEnded)
         {
             yield return new WaitForSeconds(GetCurrentSpawnInterval());
+            if (sessionEnded) yield break;
 
             if (GameManager.Instance != null && GameManager.Instance.IsPaused)
             {
@@ -264,6 +280,7 @@ public class SpawnManager : MonoBehaviour
 
     private bool TrySpawnRandomEnemy()
     {
+        if (sessionEnded) return false;
         RemoveInactiveEnemies();
 
         if (!HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0 || activeEnemies.Count >= GetCurrentMaxAliveEnemies())
@@ -358,7 +375,7 @@ public class SpawnManager : MonoBehaviour
 
     private GameObject SpawnEnemyAt(Transform spawnPoint, GameObject prefab, Vector3? position = null)
     {
-        if (spawnPoint == null || prefab == null)
+        if (sessionEnded || spawnPoint == null || prefab == null)
         {
             return null;
         }
@@ -390,13 +407,14 @@ public class SpawnManager : MonoBehaviour
 
     private void HandlePlayerLevelUp()
     {
+        if (sessionEnded) return;
         // 특정 레벨에 도달했을 때 Giant 같은 해금 적을 즉시 한 번 스폰
         TrySpawnUnlockEnemies();
     }
 
     private void TrySpawnUnlockEnemies()
     {
-        if (enemySpawnEntries == null)
+        if (sessionEnded || enemySpawnEntries == null)
         {
             return;
         }
@@ -412,6 +430,7 @@ public class SpawnManager : MonoBehaviour
 
         foreach (EnemySpawnEntry entry in enemySpawnEntries)
         {
+            if (sessionEnded) return;
             if (!CanForceSpawnUnlockEnemy(entry, playerLevel))
             {
                 continue;
@@ -424,7 +443,8 @@ public class SpawnManager : MonoBehaviour
                 return;
             }
 
-            SpawnEnemyAt(spawnPoint, entry.Prefab);
+            GameObject spawnedEnemy = SpawnEnemyAt(spawnPoint, entry.Prefab);
+            if (spawnedEnemy == null || sessionEnded) return;
             entry.MarkUnlockSpawned();
             Debug.Log($"Unlocked enemy spawned: {entry.Prefab.name} at player level {playerLevel}");
         }

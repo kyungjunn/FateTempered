@@ -579,6 +579,7 @@ GameObject:
   - component: {fileID: 2410210999288408576}
   - component: {fileID: 8351431350733202375}
   - component: {fileID: 7320460934387054071}
+  - component: {fileID: 870079413234327474}
   m_Layer: 0
   m_Name: BasePlayer
   m_TagString: Player
@@ -1085,6 +1086,18 @@ MonoBehaviour:
   soundClips:
   - {fileID: 8300000, guid: 76fec2fb6f5b84898b881413995e1d88, type: 3}
   - {fileID: 8300000, guid: 38e779b7f269c41bd8bf6c6f53c552be, type: 3}
+--- !u!114 &870079413234327474
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8888413459189353256}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9fa646f5039c54ef99dbdfba7684697b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerSkillInput
 --- !u!1001 &2674707629645099891
 PrefabInstance:
   m_ObjectHideFlags: 0

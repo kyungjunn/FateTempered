@@ -44,7 +44,7 @@ public sealed class SwordUltimateSlashSO : PlayerSkillSO
         if (character == null || !character.Is(PlayerCharacterId.Sword))
             return false;
 
-        owner.StartCoroutine(ExecuteUltimate(owner, damageType));
+        owner.StartSkillRoutine(ExecuteUltimate(owner, damageType));
         return true;
     }
 

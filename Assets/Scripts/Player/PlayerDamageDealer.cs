@@ -16,6 +16,9 @@ public class PlayerDamageDealer : MonoBehaviour
     public int DealDamage(EnemyHealth enemy, int damage, PlayerDamageType damageType,
         Vector3? attackSourcePosition = null)
     {
+        if (TryGetComponent(out PlayerSkillController skills) && skills.IsSessionEnded)
+            return 0;
+
         if (!NetworkHealth.CanWrite(gameObject) || enemy == null ||
             !NetworkHealth.CanWrite(enemy.gameObject) || enemy.IsDead || damage <= 0)
         {

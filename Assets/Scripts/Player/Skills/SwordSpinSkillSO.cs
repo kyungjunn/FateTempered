@@ -58,7 +58,7 @@ public sealed class SwordSpinSkillSO : PlayerSkillSO
         if (character == null || !character.Is(PlayerCharacterId.Sword))
             return false;
 
-        owner.StartCoroutine(ExecuteSpin(owner, damageType));
+        owner.StartSkillRoutine(ExecuteSpin(owner, damageType));
         return true;
     }
 

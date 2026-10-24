@@ -11,6 +11,7 @@ public class PlayerController : MonoBehaviour
     private Animator anim;
     private PlayerStateManager stateManager;
     private PlayerSkillController skillController;
+    private WizardSkillTargeting skillTargeting;
     private PlayerStats playerStats;
     private bool basicAttackActive;
     private bool attackSpeedSubscribed;
@@ -85,7 +86,7 @@ public class PlayerController : MonoBehaviour
             anim.SetFloat("LegSpeed", isGrounded ? 1f : 0f);
         }
 
-        if (skillController != null && skillController.ShouldSuppressBasicAttack)
+        if (skillTargeting != null && skillTargeting.ShouldSuppressBasicAttack)
             input.AttackTriggered = false;
 
         if (input.AttackTriggered)
@@ -122,7 +123,7 @@ public class PlayerController : MonoBehaviour
         motor.SubmitInput(blocked ? Vector2.zero : input.MoveInput,
             look != null ? look.InputYaw : transform.eulerAngles.y, !blocked && input.JumpTriggered);
         if (!blocked && input.AttackTriggered &&
-            (skillController == null || !skillController.ShouldSuppressBasicAttack))
+            (skillTargeting == null || !skillTargeting.ShouldSuppressBasicAttack))
         {
             // NetworkPlayerCombat owns acceptance and presentation, including on the host.
             playerAttack?.TryAttack();
@@ -153,6 +154,7 @@ public class PlayerController : MonoBehaviour
         if (anim == null) anim = GetComponentInChildren<Animator>();
         if (stateManager == null) stateManager = GetComponent<PlayerStateManager>();
         if (skillController == null) skillController = GetComponent<PlayerSkillController>();
+        if (skillTargeting == null) skillTargeting = GetComponent<WizardSkillTargeting>();
         if (playerStats == null) playerStats = GetComponent<PlayerStats>();
         if (motor == null) motor = GetComponent<NetworkPlayerMotor>();
         if (look == null) look = GetComponent<PlayerLook>();

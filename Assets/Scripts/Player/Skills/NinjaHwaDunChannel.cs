@@ -26,6 +26,8 @@ public sealed class NinjaHwaDunChannel : MonoBehaviour
     {
         // 시전자/스킬 정보 및 피해 간격, 종료 시각 기록.
         owner = skillOwner;
+        if (owner != null)
+            owner.ActiveSkillsCancelled += CancelChannel;
         skill = channelSkill;
         damageDealer = skillOwner != null ? skillOwner.DamageDealer : null;
         damage = Mathf.Max(1, tickDamage);
@@ -73,6 +75,8 @@ public sealed class NinjaHwaDunChannel : MonoBehaviour
             return;
 
         stopped = true;
+        if (owner != null)
+            owner.ActiveSkillsCancelled -= CancelChannel;
         enabled = false;
 
         Collider collider = GetComponent<Collider>();
@@ -89,6 +93,17 @@ public sealed class NinjaHwaDunChannel : MonoBehaviour
         if (notifyOwner && owner != null)
             // 정상 종료만 컨트롤러에 알려 지연된 쿨타임 시작.
             owner.NotifyChannelFinished(skill);
+    }
+
+    private void CancelChannel()
+    {
+        StopChannel(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (owner != null)
+            owner.ActiveSkillsCancelled -= CancelChannel;
     }
     private bool IsOwnerDead()
     {

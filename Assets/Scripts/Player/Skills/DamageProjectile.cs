@@ -14,6 +14,7 @@ public sealed class DamageProjectile : MonoBehaviour
     private static readonly ProjectileHeightAim HeightAim = new ProjectileHeightAim();
 
     private PlayerDamageDealer damageDealer;
+    private PlayerSkillController skillOwner;
     private NetworkObject networkObject;
     private NetworkProjectile networkProjectile;
     private PlayerDamageType damageType;
@@ -64,6 +65,11 @@ public sealed class DamageProjectile : MonoBehaviour
         }
 
         damageDealer = dealer;
+        if (skillOwner != null)
+            skillOwner.ActiveSkillsCancelled -= CancelEndedSession;
+        skillOwner = dealer != null ? dealer.GetComponent<PlayerSkillController>() : null;
+        if (skillOwner != null)
+            skillOwner.ActiveSkillsCancelled += CancelEndedSession;
         networkObject = projectileNetworkObject;
         networkProjectile = projectileNetwork;
         damageType = type;
@@ -120,6 +126,25 @@ public sealed class DamageProjectile : MonoBehaviour
                     $"Failed to spawn network projectile '{name}'. Check that its prefab is registered with the NetworkManager.");
             }
         }
+    }
+
+    private void CancelEndedSession()
+    {
+        // Session cancellation never uses Finish: an explosive projectile must not detonate.
+        if (skillOwner == null || !skillOwner.IsSessionEnded || !HasServerSimulationAuthority())
+            return;
+
+        initialized = false;
+        if (networkObject != null && networkObject.IsSpawned)
+            networkProjectile.Despawn();
+        else
+            Destroy(gameObject);
+    }
+
+    private void OnDestroy()
+    {
+        if (skillOwner != null)
+            skillOwner.ActiveSkillsCancelled -= CancelEndedSession;
     }
 
     // 이동 / 사거리 종료

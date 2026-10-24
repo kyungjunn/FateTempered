@@ -245,6 +245,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 8888413459189353256, guid: 2a4bbe959178e1d4393b6341b8072781, type: 3}
       insertIndex: -1
       addedObject: {fileID: 7354814693730518401}
+    - targetCorrespondingSourceObject: {fileID: 8888413459189353256, guid: 2a4bbe959178e1d4393b6341b8072781, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1189517987217834226}
   m_SourcePrefab: {fileID: 100100000, guid: 2a4bbe959178e1d4393b6341b8072781, type: 3}
 --- !u!114 &3124971625832102775 stripped
 MonoBehaviour:
@@ -316,6 +319,18 @@ MonoBehaviour:
   overdriveAuraPrefab: {fileID: 3190493304793549181, guid: d967f5c1404234b27930fbe4e44bf7ed, type: 3}
   overdriveWavePrefab: {fileID: 5590185487083544308, guid: 993067932f0a64ed5b6d61e5b56430b3, type: 3}
   overdriveFinalPrefab: {fileID: 1889994154918722592, guid: b7bb3aa3fcbfa4e61849b120d9763e4e, type: 3}
+--- !u!114 &1189517987217834226
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4938431607362285984}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 41cac21ff789f43d5bf2fde99c09687d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WizardSkillTargeting
   previewValidColor: {r: 0.48, g: 0.3, b: 1, a: 0.95}
   previewInvalidColor: {r: 1, g: 0.12, b: 0.12, a: 0.95}
   previewFillOpacity: 0.18

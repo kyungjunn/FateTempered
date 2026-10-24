@@ -21,7 +21,8 @@ public sealed class PlayerNetworkOwnership : NetworkBehaviour
         {
             GetComponent<PlayerInput>(), GetComponent<PlayerInputHandler>(),
             GetComponent<PlayerController>(), GetComponent<PlayerMovement>(),
-            GetComponent<PlayerLook>(), GetComponent<PlayerSkillController>()
+            GetComponent<PlayerLook>(), GetComponent<PlayerSkillController>(),
+            GetComponent<PlayerSkillInput>(), GetComponent<WizardSkillTargeting>()
         };
         initialEnabled = new bool[localBehaviours.Length];
         for (int i = 0; i < localBehaviours.Length; i++)

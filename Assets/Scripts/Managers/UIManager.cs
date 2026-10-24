@@ -34,6 +34,13 @@ public class UIManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    private void OnDisable()
+    {
+        if (Instance != this) return;
+        bool resume = GameManager.Instance != null && GameManager.Instance.IsActiveSession;
+        ClearSession(resume);
+    }
+
     public void ShowLoadingUI(bool isShow)
     {
         if (loadingPanelUI == null)
@@ -65,6 +72,8 @@ public class UIManager : MonoBehaviour
 
     public void CompleteCurrentTicket()
     {
+        if (!HasActiveSession() || pendingTickets <= 0) return;
+
         if (pendingTickets > 0)
         {
             pendingTickets--;
@@ -85,6 +94,7 @@ public class UIManager : MonoBehaviour
         pendingTickets = 0;
         currentTicketId = 0;
         isAugmentPanelOpen = false;
+        ShowLoadingUI(false);
 
         if (augmentPanelUI != null)
         {
@@ -92,7 +102,7 @@ public class UIManager : MonoBehaviour
             augmentPanelUI.gameObject.SetActive(false);
         }
 
-        if (resume && GameManager.Instance != null)
+        if (resume && HasActiveSession())
         {
             GameManager.Instance.ResumeGame();
         }
@@ -100,6 +110,12 @@ public class UIManager : MonoBehaviour
 
     private void ShowNextTicket()
     {
+        if (!HasActiveSession())
+        {
+            ClearSession(false);
+            return;
+        }
+
         if (augmentPanelUI == null || AugmentManager.Instance == null)
         {
             ClosePanelAndResume();
@@ -121,7 +137,7 @@ public class UIManager : MonoBehaviour
             augmentPanelUI.Setup(options, sessionId, currentTicketId);
         }
 
-        if (GameManager.Instance != null)
+        if (HasActiveSession())
         {
             GameManager.Instance.PauseGame();
         }
@@ -138,9 +154,14 @@ public class UIManager : MonoBehaviour
             augmentPanelUI.gameObject.SetActive(false);
         }
 
-        if (GameManager.Instance != null)
+        if (HasActiveSession())
         {
             GameManager.Instance.ResumeGame();
         }
+    }
+
+    private static bool HasActiveSession()
+    {
+        return GameManager.Instance != null && GameManager.Instance.IsActiveSession;
     }
 }

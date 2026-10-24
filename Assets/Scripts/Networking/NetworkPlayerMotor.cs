@@ -75,6 +75,11 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
 
     private void AcceptInput(Vector2 move, float yawDegrees, bool jump)
     {
+        if (skills != null && skills.IsSessionEnded)
+        {
+            ClearInput();
+            return;
+        }
         if (!IsSpawned || !IsServer || !IsFinite(move.x) || !IsFinite(move.y) ||
             !IsFinite(yawDegrees)) return;
         // Clamp components first so extreme finite input cannot overflow magnitude arithmetic.
@@ -92,7 +97,8 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
     {
         if (!IsSpawned || !IsServer) return;
         if (Time.unscaledTime - lastInputTime > InputTimeout) ClearInput();
-        if ((health != null && health.IsDead) || (state != null && state.CurrentState == PlayerState.Dead))
+        if ((skills != null && skills.IsSessionEnded) ||
+            (health != null && health.IsDead) || (state != null && state.CurrentState == PlayerState.Dead))
         {
             ClearInput();
             return;

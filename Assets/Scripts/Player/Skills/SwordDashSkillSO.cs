@@ -50,7 +50,7 @@ public sealed class SwordDashSkillSO : PlayerSkillSO
         if (character == null || !character.Is(PlayerCharacterId.Sword) || capsule == null)
             return false;
 
-        owner.StartCoroutine(Dash(owner, capsule, damageType));
+        owner.StartSkillRoutine(Dash(owner, capsule, damageType));
         return true;
     }
 

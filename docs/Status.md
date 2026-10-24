@@ -2,6 +2,19 @@
 
 현재 단계는 **NetworkTest 씬에서 Ninja / Sword / Wizard의 서버 권위 이동·기본 공격·Q/E/R·체력/사망 동기화**다. 기존 싱글플레이 캐릭터 구조는 유지한다. InGame/Map 전체 전환, 적 AI, 성장 시스템, 로비, Relay는 아직이다.
 
+## 최신: 스킬 입력 분리와 전투 세션 종료
+
+기존 NetworkTest / 싱글플레이 구조를 유지한 채, 비대해진 스킬 경로만 나눴다. 새 세션 매니저나 폴더 재배치는 하지 않았다.
+
+- `PlayerSkillInput`: Q/E/R 입력. 네트워크 소유자만 읽고, 세션이 끝나면 비활성. `BasePlayer`에 붙는다. Ninja/Sword는 이 컴포넌트만 상속한다.
+- `WizardSkillTargeting`: Wizard E 지면 미리보기·확정·취소. 미리보기 동안 기본 공격을 막는다. 확정 좌표는 클라이언트가 고르고, 서버가 범위·지면을 검사한다. `WizardPlayer`에 붙는다.
+- `PlayerSkillController`: 시전 규칙, 쿨다운/충전/궁극기, `EndSession` / `CancelActiveSkills`. 활성 스킬 코루틴은 Stop 후 Dispose한다.
+- `GameManager.EndCombatSession`: 세션 무효화 → 스폰/퀘스트/UI 중단 → 입력 차단 → 스킬 취소 → 증강/리소스 해제 → 시간·커서 복구. 씬 언로드와 네트워크 해제는 하지 않는다.
+
+RPC, 서버 권위, 체력 복제, 스킬 피해·쿨다운·충전·궁극기 규칙은 그대로다.
+
+에디터 검증 스크립트(`Assets/Scripts/Editor/*Validation.cs`)는 로컬 전용이다. GitHub에 올리지 않는다.
+
 ## 최신: 서버 권위 이동 + Q/E/R
 
 - `BasePlayer`에 `NetworkObject`, 서버 권위 `NetworkTransform`/`NetworkAnimator`, `PlayerNetworkOwnership`, `NetworkPlayerMotor`, `NetworkPlayerCombat`, `NetworkPlayerSkills`, `NetworkHealth`, `NetworkSkillPresentation`을 붙였다. Ninja/Sword/Wizard가 상속한다.
@@ -83,9 +96,9 @@
 | NetworkProjectile | 서버 투사체 Spawn/Despawn, 클라이언트 표시 |
 | NetworkSkillPresentation | 서버 스킬 이펙트 관찰, 클라이언트 카탈로그 복제 |
 
-소유자: PlayerInput, PlayerInputHandler, PlayerController, PlayerLook, PlayerSkillController 활성. Rigidbody는 Kinematic.
+소유자: PlayerInput, PlayerInputHandler, PlayerController, PlayerLook, PlayerSkillController, PlayerSkillInput 활성. Wizard는 WizardSkillTargeting도 활성. Rigidbody는 Kinematic.
 
-서버 복제본: PlayerSkillController·PlayerMovement 활성, 입력/카메라 비활성, Rigidbody 동적.
+서버 복제본: PlayerSkillController·PlayerMovement 활성, PlayerSkillInput·WizardSkillTargeting·입력/카메라 비활성, Rigidbody 동적.
 
 다른 클라이언트의 원격 플레이어: 입력/카메라/물리 비활성, Transform/Animator/체력/이펙트만 표시.
 
@@ -98,7 +111,7 @@
 
 ## 스킬
 
-- 소유자 `RequestSkill(Q/E/Ultimate)`. Wizard E는 미리보기 후 검증된 지면 좌표.
+- 소유자 `PlayerSkillInput.RequestSkill(Q/E/Ultimate)`. Wizard E는 `WizardSkillTargeting` 미리보기 후 검증된 지면 좌표.
 - 서버가 기존 SkillSO를 실행한다. 같은 프레임 중복 시전을 막는다.
 - HUD의 쿨다운·E 충전·채널·게이지는 서버 스냅샷을 읽는다.
 - Ninja 화둔/돌진/궁극기, Sword 베기/돌진/궁극기, Wizard Q/E/R을 이 경로로 넣었다.
@@ -146,10 +159,9 @@ Unity 6.3: `Window → Play Mode → Scenarios`, Play 옆 드롭다운.
 | `Assets/Scripts/Networking/NetworkProjectile.cs` | 서버 투사체 |
 | `Assets/Scripts/Networking/NetworkSkillPresentation.cs` | 스킬 이펙트 복제 |
 | `Assets/Scripts/Player/PlayerNetworkOwnership.cs` | 입력/카메라/물리 분리 |
+| `Assets/Scripts/Player/Skills/PlayerSkillInput.cs` | Q/E/R 입력 |
+| `Assets/Scripts/Player/Skills/WizardSkillTargeting.cs` | Wizard E 미리보기 |
 | `Assets/Scripts/Testing/NetworkTestSession.cs` | 연결 UI, 캐릭터 승인 |
-| `Assets/Scripts/Editor/NetworkTestValidation.cs` | 이동 스모크 |
-| `Assets/Scripts/Editor/NetworkCombatValidation.cs` | 기본 공격 통합 검증 (batch) |
-| `Assets/Scripts/Editor/NetworkSkillValidation.cs` | Q/E/R 통합 검증 |
 | `Assets/Scenes/NetworkTest.unity` | 테스트 씬 |
 | `Assets/Scenes/NinjaMultiplayerScenario.asset` | MPPM 시나리오 |
 | `Assets/Prefabs/Enemy/NetworkCombatTarget.prefab` | 테스트 표적 |

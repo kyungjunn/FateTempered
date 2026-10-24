@@ -25,7 +25,7 @@ public sealed class NinjaDashSkillSO : PlayerSkillSO
             : 0f;
         float effectiveDamageMultiplier = damageMultiplier * Mathf.Max(0f, 1f + damageBonus);
 
-        owner.StartCoroutine(Dash(owner, damageType, effectiveDamageMultiplier));
+        owner.StartSkillRoutine(Dash(owner, damageType, effectiveDamageMultiplier));
         return true;
     }
 

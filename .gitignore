@@ -108,6 +108,8 @@ Assets/_Recovery/
 # Local Unity editor automation
 /Assets/Editor/
 /Assets/Editor.meta
+/Assets/Scripts/Editor/*Validation.cs
+/Assets/Scripts/Editor/*Validation.cs.meta
 # Local icon generation scripts
 /tools/
 

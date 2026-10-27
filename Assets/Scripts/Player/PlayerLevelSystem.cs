@@ -13,6 +13,7 @@ public class PlayerLevelSystem : MonoBehaviour
 
     public void AddExp(int amount)
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return;
         currentExp += amount;
 
         while (currentExp >= requiredExp)

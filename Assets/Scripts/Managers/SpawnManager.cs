@@ -1,16 +1,15 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.SceneManagement;
 
-// 플레이어·적 스폰. 현재 플레이어 스냅샷.
+// 오프라인 플레이어·적 스폰 및 네트워크 플레이어 생성 준비.
 public class SpawnManager : MonoBehaviour
 {
     public static SpawnManager Instance;
-
-    // 생성·소실 알림
-    public static event Action<GameObject> OnPlayerSpawned;
 
     [Header("Prefabs")]
     [SerializeField] private GameObject playerPrefab;
@@ -52,16 +51,16 @@ public class SpawnManager : MonoBehaviour
     private float spawnStartTime;
     private bool sessionEnded;
 
-    public GameObject SpawnedPlayer => spawnedPlayer;
-
     public int AliveEnemyCount
     {
         get
         {
-            RemoveInactiveEnemies();
+            if (CanRunOfflineSpawning) RemoveInactiveEnemies();
             return activeEnemies.Count;
         }
     }
+
+    private bool CanRunOfflineSpawning => !sessionEnded && !NetworkGameSession.IsNetworkSessionActive;
 
     private void Awake()
     {
@@ -84,7 +83,6 @@ public class SpawnManager : MonoBehaviour
         // 소유 플레이어 소실
         GameManager.Instance?.NotifyPlayerUnavailable(spawnedPlayer);
         spawnedPlayer = null;
-        OnPlayerSpawned?.Invoke(null);
     }
 
     private void OnDisable()
@@ -105,21 +103,21 @@ public class SpawnManager : MonoBehaviour
 
     public void SpawnAll()
     {
-        if (sessionEnded) return;
+        if (!CanRunOfflineSpawning) return;
         // 맵 씬 로드가 끝난 뒤 플레이어와 적 스폰을 한 번에 초기화
         spawnStartTime = Time.time;
         ResetEnemyUnlockSpawns();
-        if (!SpawnPlayer() || sessionEnded) return;
+        if (!SpawnPlayer() || !CanRunOfflineSpawning) return;
         CacheEnemySpawnPoints();
         SpawnInitialEnemies();
-        if (sessionEnded) return;
+        if (!CanRunOfflineSpawning) return;
         StartEnemyAutoSpawn();
         TrySpawnUnlockEnemies();
     }
 
     private bool SpawnPlayer()
     {
-        if (sessionEnded) return false;
+        if (!CanRunOfflineSpawning) return false;
         if (spawnedPlayer != null) return true;
 
         if (playerPrefab == null || !playerPrefab.TryGetComponent(out PlayerCharacter character)
@@ -142,13 +140,120 @@ public class SpawnManager : MonoBehaviour
 
         spawnedPlayer = Instantiate(playerPrefab, selectedSpawn.position, selectedSpawn.rotation);
         BindPlayerLevelSystem(spawnedPlayer);
-        OnPlayerSpawned?.Invoke(spawnedPlayer);
+        if (GameManager.Instance == null || !GameManager.Instance.RegisterLocalPlayer(spawnedPlayer))
+        {
+            Debug.LogError("The offline player could not be registered with GameManager.", this);
+            UnbindPlayerLevelSystem();
+            Destroy(spawnedPlayer);
+            spawnedPlayer = null;
+            return false;
+        }
         return true;
+    }
+
+    public bool TryGetNetworkSpawnPoints(Scene map, out Transform[] points)
+    {
+        points = Array.Empty<Transform>();
+        if (!NetworkGameSession.IsNetworkSessionActive || sessionEnded ||
+            !map.IsValid() || !map.isLoaded || map.name != "Map")
+        {
+            Debug.LogError("Network spawn points require an active network session and a loaded Map scene.", this);
+            return false;
+        }
+
+        List<Transform> found = new List<Transform>(2);
+        foreach (GameObject root in map.GetRootGameObjects())
+        {
+            foreach (Transform candidate in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (candidate.CompareTag("PlayerSpawnPoint"))
+                    found.Add(candidate);
+            }
+        }
+
+        found.Sort(CompareSceneHierarchy);
+        if (found.Count != 2)
+        {
+            Debug.LogError($"Map must contain exactly two PlayerSpawnPoint transforms; found {found.Count}.", this);
+            return false;
+        }
+
+        points = found.ToArray();
+        return true;
+    }
+
+    public GameObject SpawnNetworkPlayer(GameObject prefab, Vector3 position, Quaternion rotation, Scene scene)
+    {
+        NetworkManager networkManager = NetworkManager.Singleton;
+        if (!NetworkGameSession.IsNetworkSessionActive || sessionEnded || networkManager == null ||
+            !networkManager.IsListening || !networkManager.IsServer)
+        {
+            Debug.LogError("Network player spawning is server-only and requires an active network session.", this);
+            return null;
+        }
+        if (!scene.IsValid() || !scene.isLoaded || scene.name != "Map")
+        {
+            Debug.LogError("Network players can only be spawned into a loaded Map scene.", this);
+            return null;
+        }
+        if (prefab == null || prefab.scene.IsValid() ||
+            !prefab.TryGetComponent(out NetworkObject networkPrefab) || networkPrefab.IsSpawned ||
+            !prefab.TryGetComponent(out PlayerCharacter character) ||
+            !Enum.IsDefined(typeof(PlayerCharacterId), character.CharacterId) ||
+            !networkManager.NetworkConfig.Prefabs.Contains(prefab) ||
+            !IsFinite(position) || !IsFinite(rotation) || Quaternion.Dot(rotation, rotation) < 0.0001f)
+        {
+            Debug.LogError("Network player prefab must be registered with NGO and have a valid NetworkObject and PlayerCharacter; pose must be finite.", this);
+            return null;
+        }
+
+        GameObject player = null;
+        try
+        {
+            player = Instantiate(prefab, position, rotation);
+            SceneManager.MoveGameObjectToScene(player, scene);
+            return player;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError("Failed to instantiate or move the network player into Map: " + exception.Message, this);
+            if (player != null) Destroy(player);
+            return null;
+        }
+    }
+
+    private static bool IsFinite(Vector3 value) => IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+
+    private static bool IsFinite(Quaternion value) => IsFinite(value.x) && IsFinite(value.y) &&
+        IsFinite(value.z) && IsFinite(value.w);
+
+    private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+    private static int CompareSceneHierarchy(Transform left, Transform right)
+    {
+        List<int> leftIndices = GetHierarchyIndices(left);
+        List<int> rightIndices = GetHierarchyIndices(right);
+        int sharedDepth = Mathf.Min(leftIndices.Count, rightIndices.Count);
+        for (int i = 0; i < sharedDepth; i++)
+        {
+            int comparison = leftIndices[i].CompareTo(rightIndices[i]);
+            if (comparison != 0) return comparison;
+        }
+        return leftIndices.Count.CompareTo(rightIndices.Count);
+    }
+
+    private static List<int> GetHierarchyIndices(Transform target)
+    {
+        List<int> indices = new List<int>();
+        for (Transform current = target; current != null; current = current.parent)
+            indices.Add(current.GetSiblingIndex());
+        indices.Reverse();
+        return indices;
     }
 
     private void CacheEnemySpawnPoints()
     {
-        if (sessionEnded) return;
+        if (!CanRunOfflineSpawning) return;
         enemySpawnPoints.Clear();
 
         // Map 씬에 배치된 EnemySpawnPoint 태그 오브젝트를 캐싱
@@ -172,7 +277,7 @@ public class SpawnManager : MonoBehaviour
     public bool TrySpawnQuestEnemy(GameObject prefab, out GameObject enemy)
     {
         enemy = null;
-        if (sessionEnded || prefab == null) return false;
+        if (!CanRunOfflineSpawning || prefab == null) return false;
         if (enemySpawnPoints.Count == 0) CacheEnemySpawnPoints();
         if (enemySpawnPoints.Count == 0) return false;
 
@@ -193,7 +298,7 @@ public class SpawnManager : MonoBehaviour
 
     private void SpawnInitialEnemies()
     {
-        if (sessionEnded || !spawnEnemiesOnStart || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
+        if (!CanRunOfflineSpawning || !spawnEnemiesOnStart || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
         {
             return;
         }
@@ -233,7 +338,7 @@ public class SpawnManager : MonoBehaviour
 
     private void StartEnemyAutoSpawn()
     {
-        if (sessionEnded || !enableEnemyAutoSpawn || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
+        if (!CanRunOfflineSpawning || !enableEnemyAutoSpawn || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
         {
             return;
         }
@@ -255,10 +360,10 @@ public class SpawnManager : MonoBehaviour
 
     private IEnumerator EnemySpawnRoutine()
     {
-        while (!sessionEnded)
+        while (CanRunOfflineSpawning)
         {
             yield return new WaitForSeconds(GetCurrentSpawnInterval());
-            if (sessionEnded) yield break;
+            if (!CanRunOfflineSpawning) yield break;
 
             if (GameManager.Instance != null && GameManager.Instance.IsPaused)
             {
@@ -280,7 +385,7 @@ public class SpawnManager : MonoBehaviour
 
     private bool TrySpawnRandomEnemy()
     {
-        if (sessionEnded) return false;
+        if (!CanRunOfflineSpawning) return false;
         RemoveInactiveEnemies();
 
         if (!HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0 || activeEnemies.Count >= GetCurrentMaxAliveEnemies())
@@ -375,7 +480,7 @@ public class SpawnManager : MonoBehaviour
 
     private GameObject SpawnEnemyAt(Transform spawnPoint, GameObject prefab, Vector3? position = null)
     {
-        if (sessionEnded || spawnPoint == null || prefab == null)
+        if (!CanRunOfflineSpawning || spawnPoint == null || prefab == null)
         {
             return null;
         }
@@ -407,14 +512,14 @@ public class SpawnManager : MonoBehaviour
 
     private void HandlePlayerLevelUp()
     {
-        if (sessionEnded) return;
+        if (!CanRunOfflineSpawning) return;
         // 특정 레벨에 도달했을 때 Giant 같은 해금 적을 즉시 한 번 스폰
         TrySpawnUnlockEnemies();
     }
 
     private void TrySpawnUnlockEnemies()
     {
-        if (sessionEnded || enemySpawnEntries == null)
+        if (!CanRunOfflineSpawning || enemySpawnEntries == null)
         {
             return;
         }
@@ -430,7 +535,7 @@ public class SpawnManager : MonoBehaviour
 
         foreach (EnemySpawnEntry entry in enemySpawnEntries)
         {
-            if (sessionEnded) return;
+            if (!CanRunOfflineSpawning) return;
             if (!CanForceSpawnUnlockEnemy(entry, playerLevel))
             {
                 continue;
@@ -444,7 +549,7 @@ public class SpawnManager : MonoBehaviour
             }
 
             GameObject spawnedEnemy = SpawnEnemyAt(spawnPoint, entry.Prefab);
-            if (spawnedEnemy == null || sessionEnded) return;
+            if (spawnedEnemy == null || !CanRunOfflineSpawning) return;
             entry.MarkUnlockSpawned();
             Debug.Log($"Unlocked enemy spawned: {entry.Prefab.name} at player level {playerLevel}");
         }

@@ -61,6 +61,7 @@ public class UIManager : MonoBehaviour
 
     public void RequestAugmentChoice()
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return;
         // 비활성 세션: 티켓 거부
         if (GameManager.Instance == null || !GameManager.Instance.IsActiveSession) return;
         pendingTickets++;
@@ -162,6 +163,7 @@ public class UIManager : MonoBehaviour
 
     private static bool HasActiveSession()
     {
-        return GameManager.Instance != null && GameManager.Instance.IsActiveSession;
+        return !NetworkGameSession.IsNetworkSessionActive
+            && GameManager.Instance != null && GameManager.Instance.IsActiveSession;
     }
 }

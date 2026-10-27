@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-// 초상화. 스포너 스냅샷.
+// 초상화. 로컬 플레이어 스냅샷.
 public sealed class CharacterPortraitUI : MonoBehaviour
 {
     [SerializeField] private Image portrait;
@@ -11,14 +11,14 @@ public sealed class CharacterPortraitUI : MonoBehaviour
 
     private void OnEnable()
     {
-        SpawnManager.OnPlayerSpawned += BindPlayer;
+        GameManager.OnLocalPlayerChanged += BindPlayer;
         // 이벤트 + 현재 스냅샷
-        BindPlayer(SpawnManager.Instance?.SpawnedPlayer);
+        BindPlayer(GameManager.Instance?.CurrentPlayer);
     }
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= BindPlayer;
+        GameManager.OnLocalPlayerChanged -= BindPlayer;
         SetPortrait(null);
     }
 

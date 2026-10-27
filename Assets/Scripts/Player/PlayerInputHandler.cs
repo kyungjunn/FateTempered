@@ -11,6 +11,14 @@ public class PlayerInputHandler : MonoBehaviour
 
     public PlayerLevelSystem levelSystem;
 
+    public void ClearInput()
+    {
+        MoveInput = Vector2.zero;
+        LookInput = Vector2.zero;
+        AttackTriggered = false;
+        JumpTriggered = false;
+    }
+
     public void OnMove(InputValue value)
     {
         MoveInput = value.Get<Vector2>();

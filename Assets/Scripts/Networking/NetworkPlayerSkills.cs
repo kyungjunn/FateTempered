@@ -101,6 +101,7 @@ public sealed class NetworkPlayerSkills : NetworkBehaviour
     // True means intent was submitted, not that the server accepted a cast.
     public bool RequestSkill(NetworkSkillSlot slot, Vector3 groundTarget = default, bool hasGroundTarget = false)
     {
+        if (NetworkGameSession.IsNetworkSessionActive && !NetworkGameSession.IsCombatRunning) return false;
         if (!IsSpawned || !IsOwner || !ValidSlot(slot) || !Finite(groundTarget)) return false;
         var look = GetComponent<PlayerLook>();
         float pitch = look != null && look.cameraPivot != null
@@ -119,6 +120,7 @@ public sealed class NetworkPlayerSkills : NetworkBehaviour
 
     private void Execute(NetworkSkillSlot slot, float pitch, Vector3 groundTarget, bool hasGroundTarget)
     {
+        if (NetworkGameSession.IsNetworkSessionActive && !NetworkGameSession.IsCombatRunning) return;
         if (health == null) health = GetComponent<PlayerHealth>();
         if (!IsSpawned || !IsServer || executing || acceptedFrame == Time.frameCount ||
             !ValidSlot(slot) || !Finite(pitch) || !Finite(groundTarget) || controller == null ||

@@ -54,16 +54,18 @@ public class EnemyAI : MonoBehaviour
     // 플레이어 스폰 시 이벤트 구독.
     private void OnEnable()
     {
-        SpawnManager.OnPlayerSpawned += AssignTarget;
+        GameManager.OnLocalPlayerChanged += AssignTarget;
+        AssignTarget(GameManager.Instance != null ? GameManager.Instance.CurrentPlayer : null);
     }
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= AssignTarget;
+        GameManager.OnLocalPlayerChanged -= AssignTarget;
     }
 
     private void Start()
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return;
         if (target == null)
         {
             FindTarget();
@@ -72,6 +74,11 @@ public class EnemyAI : MonoBehaviour
 
     private void Update()
     {
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            StopAgent();
+            return;
+        }
         if (enemyHealth.IsDead)
         {
             SetState(EnemyState.Dead);
@@ -116,17 +123,14 @@ public class EnemyAI : MonoBehaviour
 
     public void SetTarget(Transform newTarget)
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return;
         target = newTarget;
     }
 
     // 플레이어 스폰 시 타겟 설정
     private void AssignTarget(GameObject player)
     {
-        if (player != null)
-        {
-            target = player.transform;
-            //Debug.Log("플레이어 타겟 설정");
-        }
+        target = !NetworkGameSession.IsNetworkSessionActive && player != null ? player.transform : null;
     }
 
     // Player 태그를 가진 오브젝트를 추적 대상으로 설정

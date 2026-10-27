@@ -27,13 +27,13 @@ public sealed class CombatHudUI : MonoBehaviour
     private void OnEnable()
     {
         // 이벤트 + 현재 스냅샷
-        SpawnManager.OnPlayerSpawned += Bind;
-        Bind(SpawnManager.Instance?.SpawnedPlayer);
+        GameManager.OnLocalPlayerChanged += Bind;
+        Bind(GameManager.Instance?.CurrentPlayer);
     }
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= Bind;
+        GameManager.OnLocalPlayerChanged -= Bind;
         Unbind();
         statsPanel.SetActive(false);
     }

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-// 증강 인벤토리. 전투 씬은 스포너 권위.
+// 증강 인벤토리. 전투 씬은 로컬 플레이어에 연결.
 public sealed class AugmentInventoryUI : MonoBehaviour
 {
     [SerializeField] private RectTransform content;
@@ -19,15 +19,20 @@ public sealed class AugmentInventoryUI : MonoBehaviour
 
     private void OnEnable()
     {
-        SpawnManager.OnPlayerSpawned += Bind;
-        // 스포너 스냅샷. 미리보기는 명시적 Bind 유지.
-        Bind(SpawnManager.Instance != null ? SpawnManager.Instance.SpawnedPlayer
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            gameObject.SetActive(false);
+            return;
+        }
+        GameManager.OnLocalPlayerChanged += Bind;
+        // 로컬 스냅샷. 미리보기는 명시적 Bind 유지.
+        Bind(GameManager.Instance != null ? GameManager.Instance.CurrentPlayer
             : playerAugments != null ? playerAugments.gameObject : null);
     }
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= Bind;
+        GameManager.OnLocalPlayerChanged -= Bind;
         if (playerAugments != null) playerAugments.onSkillsChanged -= Refresh;
     }
 

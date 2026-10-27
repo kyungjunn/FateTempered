@@ -17,6 +17,12 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/NetworkTest.unity
     guid: e5edccf71e2724adb84647840f153887
+  - enabled: 1
+    path: Assets/Scenes/NetworkEntry.unity
+    guid: 411d8c03fdf2c4970813d5204e46fd29
+  - enabled: 1
+    path: Assets/Scenes/TeamLobby.unity
+    guid: 38260db2c69e8474d829316eec2682d4
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 399686f7689ad924e9dcc1468bb2562e, type: 3}
   m_UseUCBPForAssetBundles: 0

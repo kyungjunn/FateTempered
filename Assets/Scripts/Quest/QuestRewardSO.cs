@@ -10,7 +10,7 @@ public abstract class QuestRewardSO : ScriptableObject
 
     public bool CanApply(GameObject player)
     {
-        if (player == null || !IsValid) return false;
+        if (NetworkGameSession.IsNetworkSessionActive || player == null || !IsValid) return false;
         var health = player.GetComponent<PlayerHealth>();
         return (health == null || !health.IsDead) && CanApplyTo(player);
     }

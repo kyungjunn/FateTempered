@@ -1,7 +1,7 @@
 using UnityEngine;
 using TMPro;
 
-// 스탯 패널. 스포너 스냅샷.
+// 스탯 패널. 로컬 플레이어 스냅샷.
 public class StatsPanelUI : MonoBehaviour
 {
     private PlayerStats playerStats;
@@ -13,14 +13,14 @@ public class StatsPanelUI : MonoBehaviour
 
     private void OnEnable()
     {
-        SpawnManager.OnPlayerSpawned += InitializeUI;
+        GameManager.OnLocalPlayerChanged += InitializeUI;
         // 이벤트 + 현재 스냅샷
-        InitializeUI(SpawnManager.Instance?.SpawnedPlayer);
+        InitializeUI(GameManager.Instance?.CurrentPlayer);
     }
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= InitializeUI;
+        GameManager.OnLocalPlayerChanged -= InitializeUI;
         UnbindPlayer();
     }
 

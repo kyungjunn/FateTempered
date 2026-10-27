@@ -19,11 +19,13 @@ public class BossPlayerCollisionGuard : MonoBehaviour
 
     private void OnEnable()
     {
-        SpawnManager.OnPlayerSpawned += BindPlayer;
+        GameManager.OnLocalPlayerChanged += BindPlayer;
+        BindPlayer(GameManager.Instance != null ? GameManager.Instance.CurrentPlayer : null);
     }
 
     private void Start()
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return;
         GameObject player = GameObject.FindGameObjectWithTag("Player");
 
         if (player != null)
@@ -34,13 +36,16 @@ public class BossPlayerCollisionGuard : MonoBehaviour
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= BindPlayer;
+        GameManager.OnLocalPlayerChanged -= BindPlayer;
     }
 
     private void BindPlayer(GameObject player)
     {
-        if (player == null)
+        if (NetworkGameSession.IsNetworkSessionActive || player == null)
         {
+            playerRoot = null;
+            playerBody = null;
+            playerCollider = null;
             return;
         }
 
@@ -75,6 +80,7 @@ public class BossPlayerCollisionGuard : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return;
         if (bossHealth != null && bossHealth.IsDead)
         {
             return;

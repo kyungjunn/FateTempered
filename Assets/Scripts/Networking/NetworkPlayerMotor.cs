@@ -20,6 +20,7 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
     private float yaw;
     private float lastInputTime = float.NegativeInfinity;
     private bool jumpPending;
+    private bool networkDespawned;
 
     private void Awake()
     {
@@ -35,13 +36,28 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        body.isKinematic = !IsServer;
+        networkDespawned = false;
+        body.isKinematic = !IsServer ||
+            (NetworkGameSession.IsNetworkSessionActive && !IsProductionCombatReady());
         yaw = transform.eulerAngles.y;
         ClearInput();
     }
 
     public override void OnLostOwnership() { ClearInput(); }
-    public override void OnNetworkDespawn() { ClearInput(); }
+    public override void OnNetworkDespawn()
+    {
+        networkDespawned = true;
+        ClearInput();
+        if (body != null)
+        {
+            if (!body.isKinematic)
+            {
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
+            body.isKinematic = true;
+        }
+    }
 
     private void ClearInput()
     {
@@ -62,7 +78,7 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
     // No position, velocity, speed, delta time, or grounded claim is accepted from the owner.
     public void SubmitInput(Vector2 move, float yawDegrees, bool jump)
     {
-        if (!IsSpawned || !IsOwner) return;
+        if (networkDespawned || !IsSpawned || !IsOwner || !IsProductionCombatReady()) return;
         if (IsServer) AcceptInput(move, yawDegrees, jump);
         else SubmitInputRpc(move, yawDegrees, jump);
     }
@@ -75,7 +91,7 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
 
     private void AcceptInput(Vector2 move, float yawDegrees, bool jump)
     {
-        if (skills != null && skills.IsSessionEnded)
+        if (networkDespawned || !IsProductionCombatReady() || (skills != null && skills.IsSessionEnded))
         {
             ClearInput();
             return;
@@ -93,9 +109,25 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
 
     private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
+    private static bool IsProductionCombatReady()
+    {
+        if (!NetworkGameSession.IsNetworkSessionActive)
+            return true;
+
+        GameManager gameManager = GameManager.Instance;
+        return NetworkGameSession.IsCombatRunning && gameManager != null &&
+            gameManager.IsActiveSession && gameManager.IsNetworkCombatActive;
+    }
+
     private void FixedUpdate()
     {
-        if (!IsSpawned || !IsServer) return;
+        if (networkDespawned || !IsSpawned || !IsServer) return;
+        if (!IsProductionCombatReady())
+        {
+            ClearInput();
+            if (body != null) body.isKinematic = true;
+            return;
+        }
         if (Time.unscaledTime - lastInputTime > InputTimeout) ClearInput();
         if ((skills != null && skills.IsSessionEnded) ||
             (health != null && health.IsDead) || (state != null && state.CurrentState == PlayerState.Dead))

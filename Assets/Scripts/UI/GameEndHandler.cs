@@ -18,15 +18,14 @@ public class GameEndHandler : MonoBehaviour
 
     private void OnEnable()
     {
-        SpawnManager.OnPlayerSpawned += BindPlayer;
+        GameManager.OnLocalPlayerChanged += BindPlayer;
         // 이벤트 + 현재 스냅샷
-        if (SpawnManager.Instance != null)
-            BindPlayer(SpawnManager.Instance.SpawnedPlayer);
+        BindPlayer(GameManager.Instance?.CurrentPlayer);
     }
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= BindPlayer;
+        GameManager.OnLocalPlayerChanged -= BindPlayer;
         UnbindPlayer();
     }
 
@@ -40,6 +39,9 @@ public class GameEndHandler : MonoBehaviour
 
     private void BindPlayer(GameObject player)
     {
+        // Offline teardown may precede the final death notification. Retain its result
+        // source until the next player binding or OnDisable, as in the offline flow.
+        if (player == null && !NetworkGameSession.IsNetworkSessionActive) return;
         UnbindPlayer();
         if (player == null || ended) return;
         if (!player.TryGetComponent(out stateManager)
@@ -57,6 +59,7 @@ public class GameEndHandler : MonoBehaviour
 
     private void HandleDead()
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return;
         if (ended) return; // 두 번 실행 방지
         ended = true;
 

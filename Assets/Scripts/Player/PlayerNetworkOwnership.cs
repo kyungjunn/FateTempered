@@ -14,6 +14,11 @@ public sealed class PlayerNetworkOwnership : NetworkBehaviour
     private bool[] initialCameraEnabled;
     private Rigidbody body;
     private bool hadLocalControl;
+    private bool localSimulationEnabled;
+    private bool controlStateInitialized;
+    private bool registeredLocalPlayer;
+    private bool localRegistrationAttempted;
+    private bool networkDespawned;
 
     private void Awake()
     {
@@ -40,38 +45,88 @@ public sealed class PlayerNetworkOwnership : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        networkDespawned = false;
+        controlStateInitialized = false;
         SetLocalControl(IsOwner);
     }
 
     public override void OnGainedOwnership()
     {
-        if (IsSpawned) SetLocalControl(true);
+        if (IsSpawned)
+        {
+            localRegistrationAttempted = false;
+            SetLocalControl(true);
+        }
     }
 
     public override void OnLostOwnership()
     {
-        if (IsSpawned) SetLocalControl(false);
+        if (IsSpawned)
+        {
+            localRegistrationAttempted = false;
+            SetLocalControl(false);
+        }
     }
 
     public override void OnNetworkDespawn()
     {
+        networkDespawned = true;
+        if (TryGetComponent(out PlayerSkillController skills))
+            skills.EndSession();
+        UnregisterLocalPlayer();
+        localRegistrationAttempted = false;
+        if (body != null && !body.isKinematic)
+        {
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+        }
         SetLocalControl(false);
+    }
+
+    private void Update()
+    {
+        if (IsSpawned && NetworkGameSession.IsNetworkSessionActive)
+            SetLocalControl(IsOwner);
     }
 
     private void SetLocalControl(bool local)
     {
+        bool networkSession = NetworkGameSession.IsNetworkSessionActive;
+        GameManager gameManager = GameManager.Instance;
+        bool combatReady = !networkSession || (NetworkGameSession.IsCombatRunning &&
+            gameManager != null && gameManager.IsActiveSession && gameManager.IsNetworkCombatActive);
+        bool localControl = local && combatReady && !networkDespawned;
+        bool serverSimulation = IsSpawned && IsServer && combatReady && !networkDespawned;
+
+        if (networkSession && local && combatReady && !registeredLocalPlayer && !localRegistrationAttempted)
+        {
+            localRegistrationAttempted = true;
+            if (gameManager == null || !gameManager.RegisterLocalPlayer(gameObject))
+                localControl = false;
+            else
+                registeredLocalPlayer = true;
+        }
+        if (!local || !combatReady)
+            localRegistrationAttempted = false;
+        if (!localControl)
+            UnregisterLocalPlayer();
+
+        if (controlStateInitialized && hadLocalControl == localControl &&
+            localSimulationEnabled == serverSimulation)
+            return;
+
         for (int i = 0; i < localBehaviours.Length; i++)
             if (localBehaviours[i] != null)
             {
                 bool simulation = localBehaviours[i] is PlayerMovement ||
                     localBehaviours[i] is PlayerSkillController;
-                localBehaviours[i].enabled = (local || (IsSpawned && IsServer && simulation)) && initialEnabled[i];
+                localBehaviours[i].enabled = (localControl || (serverSimulation && simulation)) && initialEnabled[i];
             }
         for (int i = 0; i < playerCameras.Length; i++)
-            playerCameras[i].enabled = local && initialCameraEnabled[i];
-        // The server simulates every root; all clients follow the server NetworkTransform.
-        if (body != null) body.isKinematic = !IsSpawned || !IsServer;
-        if (local)
+            playerCameras[i].enabled = localControl && initialCameraEnabled[i];
+        // Server movement begins only after production combat is running; clients follow NetworkTransform.
+        if (body != null) body.isKinematic = !serverSimulation;
+        if (localControl)
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
@@ -81,6 +136,15 @@ public sealed class PlayerNetworkOwnership : NetworkBehaviour
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-        hadLocalControl = local;
+        hadLocalControl = localControl;
+        localSimulationEnabled = serverSimulation;
+        controlStateInitialized = true;
+    }
+
+    private void UnregisterLocalPlayer()
+    {
+        if (!registeredLocalPlayer) return;
+        registeredLocalPlayer = false;
+        GameManager.Instance?.UnregisterLocalPlayer(gameObject);
     }
 }

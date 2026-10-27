@@ -52,14 +52,14 @@ public class AugmentManager : MonoBehaviour
     private void OnEnable()
     {
         if (Instance != this) return;
-        SpawnManager.OnPlayerSpawned += HandlePlayerSpawned;
+        GameManager.OnLocalPlayerChanged += HandlePlayerSpawned;
         // 이벤트 + 현재 스냅샷
-        HandlePlayerSpawned(SpawnManager.Instance != null ? SpawnManager.Instance.SpawnedPlayer : null);
+        HandlePlayerSpawned(GameManager.Instance != null ? GameManager.Instance.CurrentPlayer : null);
     }
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= HandlePlayerSpawned;
+        GameManager.OnLocalPlayerChanged -= HandlePlayerSpawned;
     }
 
     private void OnDestroy()
@@ -79,6 +79,11 @@ public class AugmentManager : MonoBehaviour
     // 플레이어 스냅샷 연결
     private void HandlePlayerSpawned(GameObject playerObject)
     {
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            ClearSession();
+            return;
+        }
         int sessionId = GameManager.Instance != null ? GameManager.Instance.SessionId : 0;
         if (boundSessionId != sessionId)
         {
@@ -99,6 +104,7 @@ public class AugmentManager : MonoBehaviour
     public List<AugmentSO> GetRandomAugments(IReadOnlyCollection<AugmentSO> keepVisible)
     {
         List<AugmentSO> result = new List<AugmentSO>();
+        if (NetworkGameSession.IsNetworkSessionActive) return result;
         AugmentResourceLoader host = AugmentResourceLoader.Instance;
         GameManager session = GameManager.Instance;
         if (host == null || session == null || !session.IsActiveSession || playerStats == null)
@@ -164,6 +170,11 @@ public class AugmentManager : MonoBehaviour
     // 증강 적용
     public IEnumerator ApplyAugmentRoutine(AugmentSO augment, int sessionId, int ticketId, System.Action<AugmentApplyStatus, string> completed)
     {
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            completed?.Invoke(AugmentApplyStatus.Invalid, "증강은 네트워크 전투에서 아직 지원하지 않습니다.");
+            yield break;
+        }
         // 세션·플레이어 불일치 → Stale
         AugmentResourceLoader host = AugmentResourceLoader.Instance;
         GameManager session = GameManager.Instance;
@@ -273,7 +284,7 @@ public class AugmentManager : MonoBehaviour
     // 무작위 스킬 제거
     public SkillAugmentSO RemoveRandomSkill()
     {
-        if (playerAugments == null)
+        if (NetworkGameSession.IsNetworkSessionActive || playerAugments == null)
         {
             return null;
         }
@@ -284,7 +295,7 @@ public class AugmentManager : MonoBehaviour
     // 무작위 스탯 감소
     public StatReduceResult? ReduceRandomStat(float minRatio, float maxRatio)
     {
-        if (playerStats == null)
+        if (NetworkGameSession.IsNetworkSessionActive || playerStats == null)
         {
             return null;
         }

@@ -32,6 +32,7 @@ public class PlayerStats : MonoBehaviour
     // 증강 획득. 누적분에 더한다.
     public void ApplyStat(AugmentType type, float value)
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return;
         augmentBonus[type] = GetAugmentBonus(type) + value;
 
         // 스탯 갱신 이벤트 호출
@@ -42,6 +43,7 @@ public class PlayerStats : MonoBehaviour
     // 누적치 × ratio만 빼므로 결과가 0 밑으로 갈 수 없고 base 스탯은 건드리지 않는다.
     public float ReduceStatByRatio(AugmentType type, float ratio)
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return 0f;
         float current = GetAugmentBonus(type);
         float amount = current * Mathf.Clamp01(ratio);
 

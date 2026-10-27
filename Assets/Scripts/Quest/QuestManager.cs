@@ -74,16 +74,15 @@ public class QuestManager : MonoBehaviour
     {
         if (Instance != this) return;
 
-        SpawnManager.OnPlayerSpawned += HandlePlayerSpawned;
+        GameManager.OnLocalPlayerChanged += HandlePlayerSpawned;
         EnemyHealth.OnEnemyKilled += HandleEnemyKilled;
         // 이벤트 + 현재 스냅샷
-        SpawnManager spawnManager = SpawnManager.Instance;
-        if (spawnManager != null) HandlePlayerSpawned(spawnManager.SpawnedPlayer);
+        HandlePlayerSpawned(GameManager.Instance != null ? GameManager.Instance.CurrentPlayer : null);
     }
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= HandlePlayerSpawned;
+        GameManager.OnLocalPlayerChanged -= HandlePlayerSpawned;
         EnemyHealth.OnEnemyKilled -= HandleEnemyKilled;
     }
 
@@ -98,7 +97,8 @@ public class QuestManager : MonoBehaviour
 
     private static bool IsCombatSessionActive()
     {
-        return GameManager.Instance != null && GameManager.Instance.IsActiveSession;
+        return !NetworkGameSession.IsNetworkSessionActive
+            && GameManager.Instance != null && GameManager.Instance.IsActiveSession;
     }
 
     // 비활성 세션 → Stopped
@@ -157,6 +157,11 @@ public class QuestManager : MonoBehaviour
     // 같은 생존 플레이어: 진행 유지
     private void HandlePlayerSpawned(GameObject playerObject)
     {
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            ClearSession();
+            return;
+        }
         if (playerObject != null && playerObject == player
             && (State != QuestState.Stopped || (playerHealth != null && playerHealth.IsDead)))
         {
@@ -173,7 +178,8 @@ public class QuestManager : MonoBehaviour
         CurrentProgress = 0;
         RemainingTime = 0f;
         countdown = 0f;
-        State = QuestState.WaitingForAugment;
+        State = playerObject != null && IsCombatSessionActive()
+            ? QuestState.WaitingForAugment : QuestState.Stopped;
         CurrentReward = default;
     }
 

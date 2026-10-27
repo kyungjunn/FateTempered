@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-// 경험치 UI. 스포너 스냅샷.
+// 경험치 UI. 로컬 플레이어 스냅샷.
 public class InGameExpUI : MonoBehaviour
 {
     [Header("UI 컴포넌트")]
@@ -23,14 +23,19 @@ public class InGameExpUI : MonoBehaviour
 
     private void OnEnable()
     {
-        SpawnManager.OnPlayerSpawned += BindLevelSystem;
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            gameObject.SetActive(false);
+            return;
+        }
+        GameManager.OnLocalPlayerChanged += BindLevelSystem;
         // 이벤트 + 현재 스냅샷
-        BindLevelSystem(SpawnManager.Instance?.SpawnedPlayer);
+        BindLevelSystem(GameManager.Instance?.CurrentPlayer);
     }
 
     private void OnDisable()
     {
-        SpawnManager.OnPlayerSpawned -= BindLevelSystem;
+        GameManager.OnLocalPlayerChanged -= BindLevelSystem;
         UnbindLevelSystem();
     }
 

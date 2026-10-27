@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using Unity.Netcode;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
@@ -8,6 +9,7 @@ using UnityEngine.SceneManagement;
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
+    public static event Action<GameObject> OnLocalPlayerChanged;
     private static int nextSessionId = 1;
     private AugmentResourceLoader resourceLoader;
     private Scene mapScene;
@@ -15,10 +17,13 @@ public class GameManager : MonoBehaviour
     private AsyncOperation pendingMapLoad;
     private UIManager startupUIManager;
     private bool startupCancelled;
+    private bool networkCombatMode;
 
     public int SessionId { get; private set; }
     public GameObject CurrentPlayer => currentPlayer;
     public bool IsActiveSession => Instance == this && SessionId != 0;
+    public bool IsNetworkCombatActive => networkCombatMode && IsActiveSession &&
+        mapScene.IsValid() && mapScene.isLoaded;
 
     public bool IsPaused { get; private set; }
 
@@ -29,6 +34,7 @@ public class GameManager : MonoBehaviour
     private static void ResetStatics()
     {
         Instance = null;
+        OnLocalPlayerChanged = null;
         nextSessionId = 1;
     }
 
@@ -49,14 +55,12 @@ public class GameManager : MonoBehaviour
     private void OnEnable()
     {
         if (Instance != this) return;
-        SpawnManager.OnPlayerSpawned += BindPlayer;
         SceneManager.sceneUnloaded += HandleSceneUnloaded;
     }
 
     private void OnDisable()
     {
         if (Instance != this) return;
-        SpawnManager.OnPlayerSpawned -= BindPlayer;
         SceneManager.sceneUnloaded -= HandleSceneUnloaded;
         CancelStartup();
         CloseStartupLoadingUI();
@@ -66,6 +70,12 @@ public class GameManager : MonoBehaviour
     private void Start()
     {
         if (Instance != this || startupCancelled) return;
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            networkCombatMode = true;
+            StartCoroutine(NetworkLoadingRoutine());
+            return;
+        }
         StartCoroutine(LoadMapAndSpawnRoutine());
     }
 
@@ -112,7 +122,6 @@ public class GameManager : MonoBehaviour
         if (!BelongsToSession(expectedSessionId)) return;
         SessionId = 0; // 이전 비동기 요청 무효
         GameObject player = currentPlayer;
-        currentPlayer = null;
         try
         {
             RunSessionCleanup(() => SpawnManager.Instance?.EndSession());
@@ -134,6 +143,9 @@ public class GameManager : MonoBehaviour
         }
         finally
         {
+            SetCurrentPlayer(null);
+            if (!NetworkGameSession.IsNetworkSessionActive)
+                networkCombatMode = false;
             IsPaused = false;
             Time.timeScale = 1f;
             SetCursor(true);
@@ -169,29 +181,132 @@ public class GameManager : MonoBehaviour
             body.linearVelocity = Vector3.zero;
     }
 
-    // 소유 플레이어 소실 → 세션 종료
+    // 오프라인 세션은 종료하고, 네트워크에서는 로컬 플레이어만 해제한다.
     public void NotifyPlayerUnavailable(GameObject player)
     {
-        if (ReferenceEquals(currentPlayer, player))
-            EndCombatSession(SessionId);
+        UnregisterLocalPlayer(player);
     }
 
-    private void BindPlayer(GameObject player)
+    public bool RegisterLocalPlayer(GameObject player)
     {
-        if (!IsActiveSession || ReferenceEquals(currentPlayer, player)) return;
-        // 교체 = 새 세션. 이전 적용 권한 차단.
-        if (!ReferenceEquals(currentPlayer, null))
+        if (!IsActiveSession || player == null)
+            return false;
+
+        if (NetworkGameSession.IsNetworkSessionActive)
         {
-            EndCombatSession(SessionId);
+            NetworkObject networkObject = player.GetComponent<NetworkObject>();
+            if (!networkCombatMode || networkObject == null || !networkObject.IsSpawned ||
+                !networkObject.IsOwner)
+                return false;
+        }
+
+        if (ReferenceEquals(currentPlayer, player))
+            return true;
+        if (currentPlayer != null)
+        {
+            Debug.LogError("A local combat player is already registered for this session.", this);
+            return false;
+        }
+
+        SetCurrentPlayer(player);
+        return true;
+    }
+
+    public void UnregisterLocalPlayer(GameObject player)
+    {
+        if (ReferenceEquals(player, null) || !ReferenceEquals(currentPlayer, player)) return;
+
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            DisablePlayerControls(player);
+            RunSessionCleanup(() =>
+            {
+                if (player != null && player.TryGetComponent(out PlayerSkillController skills))
+                    skills.EndSession();
+            });
+            SetCurrentPlayer(null);
             return;
         }
+
+        EndCombatSession(SessionId);
+    }
+
+    private void SetCurrentPlayer(GameObject player)
+    {
+        if (ReferenceEquals(currentPlayer, player)) return;
         currentPlayer = player;
+        Action<GameObject> listeners = OnLocalPlayerChanged;
+        if (listeners == null) return;
+
+        foreach (Action<GameObject> listener in listeners.GetInvocationList())
+        {
+            try
+            {
+                listener(player);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception, this);
+            }
+        }
+    }
+
+    public bool BeginNetworkCombat(Scene map)
+    {
+        if (Instance != this || !isActiveAndEnabled || !NetworkGameSession.IsNetworkSessionActive ||
+            !map.IsValid() || !map.isLoaded || map.name != mapSceneName)
+            return false;
+
+        if (networkCombatMode && SessionId != 0)
+            return mapScene.handle == map.handle && IsNetworkCombatActive;
+        if (SessionId != 0 || currentPlayer != null)
+            return false;
+
+        networkCombatMode = true;
+        mapScene = map;
+        SessionId = nextSessionId++;
+        IsPaused = false;
+        Time.timeScale = 1f;
+        return true;
     }
 
     private void HandleSceneUnloaded(Scene scene)
     {
-        if (scene.handle == mapScene.handle || scene.handle == gameObject.scene.handle)
+        if ((mapScene.IsValid() && scene.handle == mapScene.handle) ||
+            scene.handle == gameObject.scene.handle)
             EndCombatSession(SessionId);
+    }
+
+    // 네트워크: 모든 참가자의 Map 로드·스폰(Running)까지 로딩 패널 유지.
+    private IEnumerator NetworkLoadingRoutine()
+    {
+        startupUIManager = UIManager.Instance;
+        LoadingPanelUI panel = startupUIManager != null ? startupUIManager.loadingPanelUI : null;
+        if (panel == null)
+        {
+            startupUIManager = null;
+            yield break;
+        }
+
+        startupUIManager.ShowLoadingUI(true);
+        try
+        {
+            while (true)
+            {
+                if (startupCancelled || !NetworkGameSession.IsNetworkSessionActive) yield break;
+                NetworkGameSession session = NetworkGameSession.Instance;
+                if (session == null || session.State == NetworkGameSessionState.Stopping) yield break;
+
+                bool running = NetworkGameSession.IsCombatRunning;
+                panel.SetTargetProgress(session.MatchLoadingProgress);
+                if (running && panel.IsLoadingVisualDone) yield break;
+                yield return null;
+            }
+        }
+        finally
+        {
+            CloseStartupLoadingUI();
+        }
     }
 
     private IEnumerator LoadMapAndSpawnRoutine()
@@ -252,6 +367,11 @@ public class GameManager : MonoBehaviour
 
             if (Instance != this || !isActiveAndEnabled || startupCancelled) yield break;
             Scene loadedScene = SceneManager.GetSceneByName(mapSceneName);
+            if (!loadedScene.IsValid() || !loadedScene.isLoaded)
+            {
+                Debug.LogError("전투 맵 씬 로드가 완료되지 않았습니다: " + mapSceneName, this);
+                yield break;
+            }
             SceneManager.SetActiveScene(loadedScene);
 
             mapScene = loadedScene;
@@ -261,7 +381,6 @@ public class GameManager : MonoBehaviour
             if (SpawnManager.Instance != null)
             {
                 SpawnManager.Instance.SpawnAll();
-                BindPlayer(SpawnManager.Instance.SpawnedPlayer);
             }
             if (currentPlayer == null)
             {
@@ -285,6 +404,7 @@ public class GameManager : MonoBehaviour
 
     public void PauseGame()
     {
+        if (NetworkGameSession.IsNetworkSessionActive || networkCombatMode) return;
         IsPaused = true;
         Time.timeScale = 0f;
         SetCursor(true);
@@ -292,6 +412,7 @@ public class GameManager : MonoBehaviour
 
     public void ResumeGame()
     {
+        if (NetworkGameSession.IsNetworkSessionActive || networkCombatMode) return;
         IsPaused = false;
         Time.timeScale = 1f;
         SetCursor(false);

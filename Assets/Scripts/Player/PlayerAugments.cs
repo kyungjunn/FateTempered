@@ -50,6 +50,7 @@ public class PlayerAugments : MonoBehaviour
     // 획득 또는 중첩
     public SkillAcquireStatus TryAcquireLoadedSkill(SkillAugmentSO so, GameObject prefab)
     {
+        if (NetworkGameSession.IsNetworkSessionActive) return SkillAcquireStatus.Invalid;
         // 데이터 검사
         if (so == null)
         {
@@ -144,7 +145,7 @@ public class PlayerAugments : MonoBehaviour
     {
         removed = null;
 
-        if (ownedSkills.Count == 0)
+        if (NetworkGameSession.IsNetworkSessionActive || ownedSkills.Count == 0)
         {
             return false;
         }

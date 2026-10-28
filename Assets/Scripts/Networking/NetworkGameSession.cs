@@ -37,6 +37,15 @@ public sealed class NetworkGameSession : MonoBehaviour
 
     [SerializeField] private GameObject[] playerPrefabs = new GameObject[3];
 
+    [Header("Downed / Revive")]
+    [Tooltip("쓰러진 팀원이 부활하기까지 다른 팀원이 버텨야 하는 시간(초).")]
+    [SerializeField] private float reviveDelay = 10f;
+    [SerializeField, Range(0.05f, 1f)] private float reviveHealthRatio = 0.5f;
+    [SerializeField] private float reviveInvulnerableSeconds = 2f;
+
+    private MatchFlow matchFlow;
+    private double matchStartedAt;
+
     private static NetworkGameSession instance;
     private static bool networkSessionActive;
 
@@ -214,6 +223,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         ProcessCompletedNetworkSceneLoad();
         ProcessQueuedNetworkSceneLoad();
         TryPrepareLocalCombat();
+        TickMatchFlow();
 
         if (state == NetworkGameSessionState.Stopping)
             AdvanceCleanup(now);
@@ -1155,6 +1165,7 @@ public sealed class NetworkGameSession : MonoBehaviour
                     Destroy(spawned.gameObject);
             }
             spawnedPlayers.Remove(clientId);
+            matchFlow?.Remove(clientId, Time.timeAsDouble);
             if (lobby != null) lobby.RemoveMember(clientId);
             UpdateHostAdvertisement();
         }
@@ -1288,7 +1299,46 @@ public sealed class NetworkGameSession : MonoBehaviour
         localCombatReady = localCombatPrepared;
         SetState(NetworkGameSessionState.Running, "All participants loaded and spawned. Combat is running.", null);
         if (SpawnManager.Instance == null || !SpawnManager.Instance.BeginNetworkEnemySpawning(map, spawnedPlayers.Count))
+        {
             BeginStop("The server could not start network enemy spawning.", true, false);
+            return;
+        }
+        StartMatchFlow();
+    }
+
+    public MatchFlow MatchFlow => matchFlow;
+
+    // 서버: 판 시작 시 명단 전원을 등록한다.
+    private void StartMatchFlow()
+    {
+        matchFlow = new MatchFlow(reviveDelay, reviveHealthRatio, reviveInvulnerableSeconds);
+        matchStartedAt = Time.timeAsDouble;
+        foreach (KeyValuePair<ulong, NetworkObject> pair in spawnedPlayers)
+            if (pair.Value != null && pair.Value.TryGetComponent(out PlayerHealth health))
+                matchFlow.Add(pair.Key, health);
+        matchFlow.MatchEnded += HandleMatchEnded;
+    }
+
+    private void TickMatchFlow()
+    {
+        if (matchFlow == null || matchFlow.Ended || manager == null || !manager.IsServer ||
+            state != NetworkGameSessionState.Running)
+            return;
+        matchFlow.Tick(Time.timeAsDouble);
+    }
+
+    // 서버: 살아 있는 멤버 0명. 적 생성·AI를 멈춘다. 결과 공개·로비 복귀는 Ended 단계에서 처리한다.
+    private void HandleMatchEnded()
+    {
+        Debug.Log($"[Match] All players are down after {matchFlow.EndedAt - matchStartedAt:F1}s. Match ended.");
+        try
+        {
+            SpawnManager.Instance?.EndSession();
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception, this);
+        }
     }
 
     private bool SpawnFrozenPlayers(Scene map, out string spawnError)
@@ -1891,6 +1941,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         DetachLobby();
         pendingAdmissions.Clear();
         spawnedPlayers.Clear();
+        matchFlow = null;
         frozenClientIds.Clear();
         completedSceneClients.Clear();
         pendingSceneLoads.Clear();
@@ -1956,6 +2007,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         pendingSceneLoads.Clear();
         mapLoadOperation = null;
         spawnedPlayers.Clear();
+        matchFlow = null;
         frozenClientIds.Clear();
         completedSceneClients.Clear();
         expectedSceneName = null;

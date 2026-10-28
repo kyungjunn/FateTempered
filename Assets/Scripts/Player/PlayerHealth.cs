@@ -2,7 +2,7 @@
 using UnityEngine;
 
 // 플레이어 현재 체력, 피격, 회복을 관리
-public class PlayerHealth : LivingEntity
+public class PlayerHealth : LivingEntity, MatchFlow.IMember
 {
     [SerializeField] private PlayerStats stats;
     [SerializeField] private int maxHealth = 100;

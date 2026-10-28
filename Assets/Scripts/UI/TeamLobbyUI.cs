@@ -203,6 +203,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
                             phase == NetworkLobbyPhase.Lobby;
         bool loadingVisible = session != null &&
                               (state == NetworkGameSessionState.LoadingMatch || state == NetworkGameSessionState.Stopping ||
+                               state == NetworkGameSessionState.ReturningToLobby ||
                                phase == NetworkLobbyPhase.LoadingMatch || phase == NetworkLobbyPhase.Stopping);
 
         SetPanel(lobbyPanel, lobbyVisible);

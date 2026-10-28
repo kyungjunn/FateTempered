@@ -17,6 +17,8 @@ public enum NetworkGameSessionState
     Lobby,
     LoadingMatch,
     Running,
+    Ended,
+    ReturningToLobby,
     Stopping
 }
 
@@ -45,6 +47,15 @@ public sealed class NetworkGameSession : MonoBehaviour
 
     private MatchFlow matchFlow;
     private double matchStartedAt;
+    private NetworkSceneManager.OnEventCompletedDelegateHandler unloadCompletedCallback;
+    private string expectedUnloadSceneName;
+    private bool pendingUnloadComplete;
+    private bool pendingUnloadFailed;
+    private string pendingUnloadFailure;
+    private bool matchResultReceived;
+
+    // 마지막 판 결과를 받았을 때 (서버·클라이언트 공통).
+    public event Action<MatchResult> MatchResultReceived;
 
     private static NetworkGameSession instance;
     private static bool networkSessionActive;
@@ -90,6 +101,7 @@ public sealed class NetworkGameSession : MonoBehaviour
     private NetworkLobbySnapshot frozenRoster;
     private readonly HashSet<ulong> frozenClientIds = new HashSet<ulong>();
     private readonly HashSet<ulong> completedSceneClients = new HashSet<ulong>();
+    private readonly HashSet<ulong> completedUnloadClients = new HashSet<ulong>();
     private readonly Dictionary<ulong, PendingAdmission> pendingAdmissions = new Dictionary<ulong, PendingAdmission>(1);
     private readonly Dictionary<int, string> ownedScenes = new Dictionary<int, string>();
     private readonly HashSet<int> scenesPresentBeforeSession = new HashSet<int>();
@@ -224,6 +236,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         ProcessQueuedNetworkSceneLoad();
         TryPrepareLocalCombat();
         TickMatchFlow();
+        ProcessCompletedReturnUnload();
 
         if (state == NetworkGameSessionState.Stopping)
             AdvanceCleanup(now);
@@ -744,8 +757,13 @@ public sealed class NetworkGameSession : MonoBehaviour
             {
                 if (callbackGeneration == generation) HandleSynchronizeComplete(clientId);
             };
+            unloadCompletedCallback = (sceneName, mode, completed, timedOut) =>
+            {
+                if (callbackGeneration == generation) HandleNetworkUnloadCompleted(sceneName, mode, completed, timedOut);
+            };
             networkSceneManager.OnLoad += sceneLoadCallback;
             networkSceneManager.OnLoadEventCompleted += loadCompletedCallback;
+            networkSceneManager.OnUnloadEventCompleted += unloadCompletedCallback;
             networkSceneManager.OnSynchronizeComplete += synchronizeCompleteCallback;
         }
 
@@ -762,11 +780,13 @@ public sealed class NetworkGameSession : MonoBehaviour
         {
             if (sceneLoadCallback != null) networkSceneManager.OnLoad -= sceneLoadCallback;
             if (loadCompletedCallback != null) networkSceneManager.OnLoadEventCompleted -= loadCompletedCallback;
+            if (unloadCompletedCallback != null) networkSceneManager.OnUnloadEventCompleted -= unloadCompletedCallback;
             if (synchronizeCompleteCallback != null) networkSceneManager.OnSynchronizeComplete -= synchronizeCompleteCallback;
         }
         networkSceneManager = null;
         sceneLoadCallback = null;
         loadCompletedCallback = null;
+        unloadCompletedCallback = null;
         synchronizeCompleteCallback = null;
     }
 
@@ -1154,7 +1174,13 @@ public sealed class NetworkGameSession : MonoBehaviour
             return;
         }
 
-        if (state == NetworkGameSessionState.Running)
+        if (state == NetworkGameSessionState.ReturningToLobby)
+        {
+            BeginStop("A participant disconnected while the room was returning to the lobby.", true, false);
+            return;
+        }
+
+        if (state == NetworkGameSessionState.Running || state == NetworkGameSessionState.Ended)
         {
             EndPlayerSkillSession(clientId);
             if (spawnedPlayers.TryGetValue(clientId, out NetworkObject spawned) && spawned != null)
@@ -1215,9 +1241,28 @@ public sealed class NetworkGameSession : MonoBehaviour
         if (!manager.IsServer)
         {
             if (current.Phase == NetworkLobbyPhase.LoadingMatch && state == NetworkGameSessionState.Lobby)
+            {
+                ResetMatchResult();
                 SetState(NetworkGameSessionState.LoadingMatch, "The host locked the roster; loading the match.", null);
-            else if (current.Phase == NetworkLobbyPhase.Running && state != NetworkGameSessionState.Running)
+            }
+            else if (current.Phase == NetworkLobbyPhase.Running && state != NetworkGameSessionState.Running &&
+                     state != NetworkGameSessionState.Ended)
+            {
+                if (state == NetworkGameSessionState.Lobby)
+                    ResetMatchResult();
                 SetState(NetworkGameSessionState.LoadingMatch, "Waiting for local combat services to become ready.", null);
+            }
+            else if (current.Phase == NetworkLobbyPhase.Ended &&
+                     (state == NetworkGameSessionState.Running || state == NetworkGameSessionState.LoadingMatch ||
+                      state == NetworkGameSessionState.Lobby))
+                EnterEnded();
+            else if (current.Phase == NetworkLobbyPhase.Lobby &&
+                     (state == NetworkGameSessionState.Ended || state == NetworkGameSessionState.ReturningToLobby))
+            {
+                localCombatPrepared = false;
+                localCombatReady = false;
+                SetState(NetworkGameSessionState.Lobby, "Back in the room. Ready up for the next match.", null);
+            }
             else if (current.Phase == NetworkLobbyPhase.Stopping)
                 BeginStop("The host is closing the room.", true, false);
         }
@@ -1246,6 +1291,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             return;
         }
 
+        ResetMatchResult();
         frozenClientIds.Clear();
         frozenClientIds.Add(frozenRoster.Member0.ClientId);
         if (frozenRoster.Member1.Occupied)
@@ -1330,7 +1376,8 @@ public sealed class NetworkGameSession : MonoBehaviour
     // 서버: 살아 있는 멤버 0명. 적 생성·AI를 멈춘다. 결과 공개·로비 복귀는 Ended 단계에서 처리한다.
     private void HandleMatchEnded()
     {
-        Debug.Log($"[Match] All players are down after {matchFlow.EndedAt - matchStartedAt:F1}s. Match ended.");
+        float seconds = (float)(matchFlow.EndedAt - matchStartedAt);
+        Debug.Log($"[Match] All players are down after {seconds:F1}s. Match ended.");
         try
         {
             SpawnManager.Instance?.EndSession();
@@ -1339,6 +1386,314 @@ public sealed class NetworkGameSession : MonoBehaviour
         {
             Debug.LogException(exception, this);
         }
+
+        MatchResult result = CaptureMatchResult(seconds);
+        if (lobby == null || !lobby.PublishEnded(result))
+        {
+            BeginStop("The server could not publish the match result.", true, false);
+            return;
+        }
+        EnterEnded();
+    }
+
+    // 서버: 명단 순서(방장 먼저)로 플레이어별 기록을 캡처한다. 이탈한 팀원은 결과에 없다.
+    private MatchResult CaptureMatchResult(float seconds)
+    {
+        var players = new List<PlayerResult>(2);
+        NetworkLobbySnapshot snapshot = lobby != null ? lobby.Snapshot : frozenRoster;
+        NetworkLobbyMemberSnapshot[] members = { snapshot.Member0, snapshot.Member1 };
+        foreach (NetworkLobbyMemberSnapshot member in members)
+        {
+            if (!member.Occupied || !spawnedPlayers.TryGetValue(member.ClientId, out NetworkObject player) ||
+                player == null)
+                continue;
+            players.Add(PlayerResult.Capture(player.gameObject, member.DisplayName, member.ClientId));
+        }
+        return new MatchResult { MatchSeconds = seconds, Players = players.ToArray() };
+    }
+
+    // 서버·클라이언트: 판 종료. 전투 세션을 닫고 결과 화면을 기다린다. 씬과 NGO는 유지한다.
+    private void EnterEnded(bool authoritativeResultReceived = false)
+    {
+        bool activeMatch = state == NetworkGameSessionState.Running || state == NetworkGameSessionState.LoadingMatch ||
+            (state == NetworkGameSessionState.Lobby &&
+             (authoritativeResultReceived || (lobby != null && lobby.Snapshot.Phase == NetworkLobbyPhase.Ended)));
+        if (!activeMatch) return;
+        localCombatReady = false;
+        GameManager gameManager = GameManager.Instance;
+        if (gameManager != null)
+        {
+            try
+            {
+                gameManager.EndCombatSession(gameManager.SessionId);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception, this);
+            }
+        }
+        SetState(NetworkGameSessionState.Ended, "The match is over.", null);
+    }
+
+    private void HandleMatchResult(MatchResult result)
+    {
+        if (matchResultReceived)
+            return;
+
+        if (state != NetworkGameSessionState.Ended)
+            EnterEnded(true);
+        if (state != NetworkGameSessionState.Ended)
+        {
+            deferredFailure = "The room received a match result outside an active match.";
+            return;
+        }
+
+        matchResultReceived = true;
+        GameResult.Data = result;
+        Action<MatchResult> listeners = MatchResultReceived;
+        if (listeners == null) return;
+        foreach (Action<MatchResult> listener in listeners.GetInvocationList())
+        {
+            try
+            {
+                listener(result);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception, this);
+            }
+        }
+    }
+
+    private void ResetMatchResult()
+    {
+        matchResultReceived = false;
+        GameResult.Clear();
+    }
+
+    public bool CanReturnToLobby => state == NetworkGameSessionState.Ended && isHost && !teardownStarted &&
+        manager != null && manager.IsListening && manager.IsServer && networkSceneManager != null &&
+        lobby != null && lobby.IsSpawned && lobby.Snapshot.Phase == NetworkLobbyPhase.Ended;
+
+    // 방장: 결과 화면에서 같은 방으로 돌아간다. Map → InGame 순으로 모든 참가자에서 언로드한다.
+    public void ReturnToLobby()
+    {
+        if (!CanReturnToLobby) return;
+        localCombatReady = false;
+        SetState(NetworkGameSessionState.ReturningToLobby, "Returning to the room.", null);
+        if (state != NetworkGameSessionState.ReturningToLobby) return;
+
+        foreach (KeyValuePair<ulong, NetworkObject> pair in spawnedPlayers)
+        {
+            try
+            {
+                EndPlayerSkillSession(pair.Key);
+                if (pair.Value != null && pair.Value.IsSpawned)
+                    pair.Value.Despawn(true);
+            }
+            catch (Exception exception)
+            {
+                BeginStop("Could not remove a match PlayerObject before returning to the room: " + exception.Message,
+                    true, false);
+                return;
+            }
+        }
+        spawnedPlayers.Clear();
+        matchFlow = null;
+        expectedUnloadSceneName = null;
+        pendingUnloadComplete = false;
+        pendingUnloadFailed = false;
+        pendingUnloadFailure = null;
+        completedSceneClients.Clear();
+        completedUnloadClients.Clear();
+        expectedSceneName = null;
+        queuedSceneName = null;
+        expectedScenePurpose = SceneLoadPurpose.None;
+        pendingSceneLoadComplete = false;
+        pendingSceneLoadFailed = false;
+        pendingSceneLoadFailure = null;
+        QueueNextReturnUnload();
+    }
+
+    private void QueueNextReturnUnload()
+    {
+        if (state != NetworkGameSessionState.ReturningToLobby || manager == null || !manager.IsListening ||
+            !manager.IsServer || networkSceneManager == null)
+        {
+            BeginStop("The server lost ownership of the shared scene return operation.", true, false);
+            return;
+        }
+
+        Scene lobbyScene = SceneManager.GetSceneByName(LobbySceneName);
+        if (!lobbyScene.IsValid() || !lobbyScene.isLoaded)
+        {
+            BeginStop("TeamLobby was not present while returning from the match.", true, false);
+            return;
+        }
+
+        Scene mapScene = SceneManager.GetSceneByName(MapSceneName);
+        Scene inGameScene = SceneManager.GetSceneByName(InGameSceneName);
+        string sceneName = mapScene.IsValid() && mapScene.isLoaded ? MapSceneName
+            : inGameScene.IsValid() && inGameScene.isLoaded ? InGameSceneName : null;
+        if (sceneName == null)
+        {
+            CompleteReturnToLobby();
+            return;
+        }
+
+        Scene scene = SceneManager.GetSceneByName(sceneName);
+        if (!scene.IsValid() || !scene.isLoaded || expectedUnloadSceneName != null)
+        {
+            BeginStop("The next session scene was not ready for its ordered unload: " + sceneName + ".", true, false);
+            return;
+        }
+        expectedUnloadSceneName = sceneName;
+        pendingUnloadComplete = false;
+        pendingUnloadFailed = false;
+        pendingUnloadFailure = null;
+        completedUnloadClients.Clear();
+        actionDeadline = Time.unscaledTimeAsDouble + SceneLoadTimeout;
+        SceneEventProgressStatus status;
+        try
+        {
+            status = networkSceneManager.UnloadScene(scene);
+        }
+        catch (Exception exception)
+        {
+            BeginStop("NGO failed to unload " + sceneName + ": " + exception.Message, true, false);
+            return;
+        }
+        if (status != SceneEventProgressStatus.Started)
+            BeginStop("NGO did not start the " + sceneName + " unload (" + status + ").", true, false);
+    }
+
+    private void HandleNetworkUnloadCompleted(string sceneName, LoadSceneMode mode,
+        List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
+    {
+        if (state != NetworkGameSessionState.ReturningToLobby || sceneName != expectedUnloadSceneName)
+            return;
+
+        pendingUnloadComplete = true;
+        if (manager == null || !manager.IsServer || mode != LoadSceneMode.Additive)
+        {
+            pendingUnloadFailed = true;
+            pendingUnloadFailure = "NGO reported an invalid scene unload completion.";
+            return;
+        }
+
+        completedUnloadClients.Clear();
+        if (clientsCompleted != null)
+        {
+            for (int i = 0; i < clientsCompleted.Count; i++)
+                completedUnloadClients.Add(clientsCompleted[i]);
+        }
+
+        if (clientsTimedOut != null && clientsTimedOut.Count > 0)
+        {
+            pendingUnloadFailed = true;
+            pendingUnloadFailure = "A participant timed out while unloading " + sceneName + ".";
+            return;
+        }
+
+        NetworkLobbySnapshot current = lobby != null ? lobby.Snapshot : default;
+        if (lobby == null || !lobby.IsSpawned || current.Phase != NetworkLobbyPhase.Ended ||
+            !current.Member0.Occupied || !current.Member0.IsHost ||
+            !IsCurrentMemberUnloadComplete(current.Member0) ||
+            !IsCurrentMemberUnloadComplete(current.Member1))
+        {
+            pendingUnloadFailed = true;
+            pendingUnloadFailure = "Not every connected room member completed unloading " + sceneName + ".";
+        }
+    }
+
+    private bool IsCurrentMemberUnloadComplete(NetworkLobbyMemberSnapshot member)
+    {
+        if (!member.Occupied) return true;
+        return member.Connected && member.Synchronized && manager.ConnectedClients.ContainsKey(member.ClientId) &&
+               completedUnloadClients.Contains(member.ClientId);
+    }
+
+    private void ProcessCompletedReturnUnload()
+    {
+        if (!pendingUnloadComplete || state != NetworkGameSessionState.ReturningToLobby)
+            return;
+        string sceneName = expectedUnloadSceneName;
+        if (pendingUnloadFailed)
+        {
+            BeginStop(pendingUnloadFailure ?? "The room could not confirm unloading " + sceneName + ".", true, false);
+            return;
+        }
+
+        Scene unloadedScene = SceneManager.GetSceneByName(sceneName);
+        if (unloadedScene.IsValid() && unloadedScene.isLoaded)
+            return;
+
+        pendingUnloadComplete = false;
+        pendingUnloadFailure = null;
+        expectedUnloadSceneName = null;
+        if (sceneName == MapSceneName)
+            mapLoadOperation = null;
+        RemoveCompletedSceneOperations();
+        if (pendingSceneLoads.Count != 0)
+        {
+            BeginStop("An NGO scene load remained pending after unloading " + sceneName + ".", true, false);
+            return;
+        }
+        QueueNextReturnUnload();
+    }
+
+    private void CompleteReturnToLobby()
+    {
+        RemoveCompletedSceneOperations();
+        if (pendingSceneLoads.Count != 0)
+        {
+            BeginStop("An NGO scene load remained pending after returning from the match.", true, false);
+            return;
+        }
+
+        Scene lobbyScene = SceneManager.GetSceneByName(LobbySceneName);
+        if (manager == null || !manager.IsListening || !manager.IsServer || networkSceneManager == null ||
+            !lobbyScene.IsValid() || !lobbyScene.isLoaded ||
+            SceneManager.GetSceneByName(MapSceneName).isLoaded || SceneManager.GetSceneByName(InGameSceneName).isLoaded ||
+            lobby == null || !lobby.IsSpawned || lobby.Snapshot.Phase != NetworkLobbyPhase.Ended || !lobby.ReturnToLobby())
+        {
+            BeginStop("The room could not return to the lobby phase.", true, false);
+            return;
+        }
+
+        expectedUnloadSceneName = null;
+        pendingUnloadComplete = false;
+        pendingUnloadFailed = false;
+        pendingUnloadFailure = null;
+        frozenClientIds.Clear();
+        completedSceneClients.Clear();
+        completedUnloadClients.Clear();
+        frozenRoster = default;
+        matchStartedAt = 0d;
+        matchFlow = null;
+        mapLoadOperation = null;
+        expectedSceneName = null;
+        queuedSceneName = null;
+        expectedScenePurpose = SceneLoadPurpose.None;
+        pendingSceneLoadComplete = false;
+        pendingSceneLoadFailed = false;
+        pendingSceneLoadFailure = null;
+        actionDeadline = 0d;
+        localCombatPrepared = false;
+        localCombatReady = false;
+        admissionLocked = false;
+        admissionOpen = true;
+        SetState(NetworkGameSessionState.Lobby, "Back in the room. Ready up for the next match.", null);
+
+        NetworkLobbySnapshot current = lobby.Snapshot;
+        byte occupancy = (byte)Mathf.Min(2, current.MemberCount + pendingAdmissions.Count);
+        bool accepting = admissionOpen && !admissionLocked && occupancy < 2;
+        if (!discovery.StartHosting(roomInstanceId, roomName, GamePort, occupancy, accepting, out string discoveryError))
+        {
+            BeginStop("The LAN room responder could not restart: " + discoveryError, true, false);
+            return;
+        }
+        UpdateHostAdvertisement();
     }
 
     private bool SpawnFrozenPlayers(Scene map, out string spawnError)
@@ -1545,6 +1900,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         };
         lobby.Changed += lobbyChangedCallback;
         lobby.StartRequested += lobbyStartCallback;
+        lobby.MatchResultReceived += HandleMatchResult;
     }
 
     private void DetachLobby()
@@ -1553,6 +1909,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         {
             if (lobbyChangedCallback != null) lobby.Changed -= lobbyChangedCallback;
             if (lobbyStartCallback != null) lobby.StartRequested -= lobbyStartCallback;
+            lobby.MatchResultReceived -= HandleMatchResult;
         }
         lobby = null;
         lobbyChangedCallback = null;
@@ -1620,6 +1977,8 @@ public sealed class NetworkGameSession : MonoBehaviour
     {
         ownedScenes.Remove(scene.handle);
         if (networkSessionActive && state != NetworkGameSessionState.Stopping &&
+            state != NetworkGameSessionState.ReturningToLobby &&
+            !(state == NetworkGameSessionState.Ended && (scene.name == MapSceneName || scene.name == InGameSceneName)) &&
             IsOwnedSceneName(scene.name) && scene.name != EntrySceneName)
         {
             deferredFailure = "A session-owned scene was unloaded unexpectedly: " + scene.name + ".";
@@ -1645,6 +2004,14 @@ public sealed class NetworkGameSession : MonoBehaviour
         if (localSynchronizationPending && now >= synchronizationDeadline)
         {
             BeginStop("Lobby synchronization timed out.", true, false);
+            return;
+        }
+        if (expectedUnloadSceneName != null && now >= actionDeadline &&
+            (!pendingUnloadComplete ||
+             (SceneManager.GetSceneByName(expectedUnloadSceneName).IsValid() &&
+              SceneManager.GetSceneByName(expectedUnloadSceneName).isLoaded)))
+        {
+            BeginStop("Returning to the room timed out while unloading " + expectedUnloadSceneName + ".", true, false);
             return;
         }
         if (expectedSceneName != null && !pendingSceneLoadComplete && now >= actionDeadline)
@@ -1944,6 +2311,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         matchFlow = null;
         frozenClientIds.Clear();
         completedSceneClients.Clear();
+        completedUnloadClients.Clear();
         pendingSceneLoads.Clear();
         mapLoadOperation = null;
         ownedScenes.Clear();
@@ -1960,6 +2328,13 @@ public sealed class NetworkGameSession : MonoBehaviour
         serverStarted = false;
         localCombatPrepared = false;
         localCombatReady = false;
+        matchStartedAt = 0d;
+        matchResultReceived = false;
+        frozenRoster = default;
+        expectedUnloadSceneName = null;
+        pendingUnloadComplete = false;
+        pendingUnloadFailed = false;
+        pendingUnloadFailure = null;
         expectedSceneName = null;
         queuedSceneName = null;
         pendingSceneLoadComplete = false;
@@ -2010,6 +2385,14 @@ public sealed class NetworkGameSession : MonoBehaviour
         matchFlow = null;
         frozenClientIds.Clear();
         completedSceneClients.Clear();
+        completedUnloadClients.Clear();
+        matchStartedAt = 0d;
+        matchResultReceived = false;
+        frozenRoster = default;
+        expectedUnloadSceneName = null;
+        pendingUnloadComplete = false;
+        pendingUnloadFailed = false;
+        pendingUnloadFailure = null;
         expectedSceneName = null;
         queuedSceneName = null;
         pendingSceneLoadComplete = false;

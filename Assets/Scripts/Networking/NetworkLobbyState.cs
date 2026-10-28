@@ -9,6 +9,7 @@ public enum NetworkLobbyPhase : byte
     Lobby,
     LoadingMatch,
     Running,
+    Ended,
     Stopping
 }
 
@@ -249,6 +250,8 @@ public sealed class NetworkLobbyState : NetworkBehaviour
 
     public event Action<NetworkLobbyState> Changed;
     public event Action<NetworkLobbyState> StartRequested;
+    // 판 종료 결과. 서버는 PublishEnded에서, 클라이언트는 RPC로 한 번 받는다.
+    public event Action<MatchResult> MatchResultReceived;
 
     public NetworkLobbySnapshot Snapshot => snapshot.Value;
     public NetworkList<NetworkLobbyNotice> Notices => notices;
@@ -338,7 +341,8 @@ public sealed class NetworkLobbyState : NetworkBehaviour
         if (!IsServer || !IsSpawned) return false;
 
         NetworkLobbySnapshot current = snapshot.Value;
-        if (current.Phase != NetworkLobbyPhase.Lobby && current.Phase != NetworkLobbyPhase.Running)
+        if (current.Phase != NetworkLobbyPhase.Lobby && current.Phase != NetworkLobbyPhase.Running &&
+            current.Phase != NetworkLobbyPhase.Ended)
             return false;
 
         NetworkLobbyMemberSnapshot member;
@@ -387,6 +391,68 @@ public sealed class NetworkLobbyState : NetworkBehaviour
         current.Revision = NextNonZero(current.Revision);
         snapshot.Value = current;
         return true;
+    }
+
+    // 서버: 전원 쓰러짐. Running에서 한 번만.
+    internal bool PublishEnded(MatchResult result)
+    {
+        if (!IsServer || !IsSpawned || snapshot.Value.Phase != NetworkLobbyPhase.Running)
+            return false;
+
+        NetworkLobbySnapshot current = snapshot.Value;
+        current.Phase = NetworkLobbyPhase.Ended;
+        current.Revision = NextNonZero(current.Revision);
+        snapshot.Value = current;
+        try
+        {
+            MatchResultRpc(result);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception, this);
+            return false;
+        }
+        RaiseMatchResultReceived(result);
+        return true;
+    }
+
+    // 서버: 결과 화면에서 같은 방의 로비로 돌아간다. 팀원은 다시 준비해야 한다.
+    internal bool ReturnToLobby()
+    {
+        if (!IsServer || !IsSpawned || snapshot.Value.Phase != NetworkLobbyPhase.Ended)
+            return false;
+
+        NetworkLobbySnapshot current = snapshot.Value;
+        current.Phase = NetworkLobbyPhase.Lobby;
+        if (current.Member0.Occupied && !current.Member0.IsHost) current.Member0.Ready = false;
+        if (current.Member1.Occupied && !current.Member1.IsHost) current.Member1.Ready = false;
+        current.Revision = NextNonZero(current.Revision);
+        requestRates.Clear();
+        snapshot.Value = current;
+        return true;
+    }
+
+    [Rpc(SendTo.NotServer, InvokePermission = RpcInvokePermission.Server)]
+    private void MatchResultRpc(MatchResult result)
+    {
+        RaiseMatchResultReceived(result);
+    }
+
+    private void RaiseMatchResultReceived(MatchResult result)
+    {
+        Action<MatchResult> listeners = MatchResultReceived;
+        if (listeners == null) return;
+        foreach (Action<MatchResult> listener in listeners.GetInvocationList())
+        {
+            try
+            {
+                listener(result);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception, this);
+            }
+        }
     }
 
     internal void PublishStopping()

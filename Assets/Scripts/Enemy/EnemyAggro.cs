@@ -15,6 +15,7 @@ public sealed class EnemyAggro : MonoBehaviour
     private float targetLockedUntil;
 
     public IReadOnlyList<PlayerDamageDealer> Contributors => contributors;
+    public PlayerDamageDealer LastAttacker => lastAttacker;
 
     public void RecordHit(PlayerDamageDealer source)
     {

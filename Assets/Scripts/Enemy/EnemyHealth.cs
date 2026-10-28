@@ -126,7 +126,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
 
         deathHandled = true;
         IsDead = true;
-        RunStats.AddKill();
+        CreditKill();
         AwardExpOnce();
         OnEnemyKilled?.Invoke(this);
         ApplyDeathPresentation();
@@ -173,6 +173,18 @@ public class EnemyHealth : MonoBehaviour, IDamageable
         {
             networkObject.Despawn(true);
         }
+    }
+
+    // 처치 수는 마지막 타격자 한 명에게 준다. 오프라인은 플레이어 하나뿐이다.
+    private void CreditKill()
+    {
+        PlayerDamageDealer killer = aggro != null ? aggro.LastAttacker : null;
+        if (killer == null && !NetworkGameSession.IsNetworkSessionActive)
+        {
+            GameObject offlinePlayer = GameObject.FindGameObjectWithTag("Player");
+            if (offlinePlayer != null) killer = offlinePlayer.GetComponent<PlayerDamageDealer>();
+        }
+        if (killer != null && killer.TryGetComponent(out PlayerRunStats run)) run.AddKill();
     }
 
     // 처치 보상 경험치를 1회 지급. 네트워크는 피해를 준 플레이어 전원이 전액을 받는다.

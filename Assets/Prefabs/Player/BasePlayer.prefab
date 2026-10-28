@@ -581,6 +581,8 @@ GameObject:
   - component: {fileID: 7320460934387054071}
   - component: {fileID: 870079413234327474}
   - component: {fileID: 5943094642595810479}
+  - component: {fileID: 1963736139154756641}
+  - component: {fileID: 3206560176225429891}
   m_Layer: 0
   m_Name: BasePlayer
   m_TagString: Player
@@ -1112,6 +1114,33 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkPlayerProgress
   ShowTopMostFoldoutHeaderGroup: 1
+--- !u!114 &1963736139154756641
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8888413459189353256}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6132d18860293a141a160fd53970575e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  stats: {fileID: 0}
+  maxHealth: 100
+  disableControlsOnDeath: 0
+--- !u!114 &3206560176225429891
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8888413459189353256}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0da847e36027244f6be9cfe0a890fc87, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerRunStats
 --- !u!1001 &2674707629645099891
 PrefabInstance:
   m_ObjectHideFlags: 0

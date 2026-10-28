@@ -1,25 +1,22 @@
 using UnityEngine;
 
-// 사망 결과 저장 후 현재 씬에서 세션 종료 요청
+// 오프라인: 플레이어 HP 0 → 결과 캡처 → 세션 종료.
+// 네트워크 판 종료(전원 쓰러짐)는 NetworkGameSession이 결과를 받아 GameResult에 기록한다.
 public class GameEndHandler : MonoBehaviour
 {
     private PlayerStateManager stateManager;
-    private PlayerStats stats;
-    private PlayerLevelSystem levelSystem;
     private float combatStartTime;
-
     private bool ended;
 
     private void Awake()
     {
-        RunStats.Reset(); // 새 판 시작: 킬 수 초기화
+        GameResult.Clear();
         ended = false;
     }
 
     private void OnEnable()
     {
         GameManager.OnLocalPlayerChanged += BindPlayer;
-        // 이벤트 + 현재 스냅샷
         BindPlayer(GameManager.Instance?.CurrentPlayer);
     }
 
@@ -33,23 +30,17 @@ public class GameEndHandler : MonoBehaviour
     {
         if (stateManager != null) stateManager.OnDead -= HandleDead;
         stateManager = null;
-        stats = null;
-        levelSystem = null;
     }
 
     private void BindPlayer(GameObject player)
     {
-        // Offline teardown may precede the final death notification. Retain its result
-        // source until the next player binding or OnDisable, as in the offline flow.
+        // 오프라인 정리가 마지막 사망 알림보다 먼저 올 수 있으므로 다음 바인딩까지 유지한다.
         if (player == null && !NetworkGameSession.IsNetworkSessionActive) return;
         UnbindPlayer();
-        if (player == null || ended) return;
-        if (!player.TryGetComponent(out stateManager)
-            || !player.TryGetComponent(out stats)
-            || !player.TryGetComponent(out levelSystem))
+        if (player == null || ended || NetworkGameSession.IsNetworkSessionActive) return;
+        if (!player.TryGetComponent(out stateManager))
         {
-            Debug.LogError("GameEndHandler requires player state, stats and level components.", this);
-            UnbindPlayer();
+            Debug.LogError("GameEndHandler requires PlayerStateManager.", this);
             return;
         }
 
@@ -59,31 +50,15 @@ public class GameEndHandler : MonoBehaviour
 
     private void HandleDead()
     {
-        if (NetworkGameSession.IsNetworkSessionActive) return;
-        if (ended) return; // 두 번 실행 방지
+        if (ended || NetworkGameSession.IsNetworkSessionActive) return;
         ended = true;
 
-        GameResult.Data = BuildResult(); // 사망 순간 수치
-        // 결과 보존 후 세션 종료
-        GameManager.Instance?.NotifyPlayerUnavailable(stateManager.gameObject);
-    }
-
-    private ResultData BuildResult()
-    {
-        return new ResultData
+        GameObject player = stateManager.gameObject;
+        GameResult.Data = new MatchResult
         {
-            isVictory = false,
-            survivalTime = Time.time - combatStartTime,
-            monsterKills = RunStats.Kills,
-            finalLevel = levelSystem.level,
-
-            attackDamage = stats.AttackDamage,
-            hp = 0f,                // 죽은 순간이라 현재 체력은 0
-            maxHp = stats.HP,       // PlayerStats.HP는 최대 체력
-            speed = stats.MoveSpeed,
-            attackSpeed = stats.AttackSpeed,
-            defense = stats.Defense
+            MatchSeconds = Time.time - combatStartTime,
+            Players = new[] { PlayerResult.Capture(player, LocalPlayerProfile.LoadDisplayName(), 0) }
         };
+        GameManager.Instance?.NotifyPlayerUnavailable(player);
     }
-
 }

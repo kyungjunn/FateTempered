@@ -31,6 +31,19 @@ public class EnemyAI : MonoBehaviour
 
     [SerializeField] private float retargetInterval = 0.2f;
 
+    [Header("Crowd")]
+    [Tooltip("같은 플레이어를 쫓는 적끼리 둘레 각도를 나눠 포위한다.")]
+    [SerializeField] private bool surroundTarget = true;
+    [Tooltip("포위 슬롯로 우회하기 시작하는 거리(공격 사거리 배수). 이보다 멀면 플레이어로 직진.")]
+    [SerializeField] private float surroundEngageRangeMultiplier = 3f;
+    [Tooltip("주변 적과 이 거리(에이전트 반경 합 배수)보다 가까우면 밀어낸다.")]
+    [SerializeField] private float separationRadiusMultiplier = 1.25f;
+    [SerializeField] private float separationSpeed = 2f;
+    [SerializeField] private LayerMask separationLayers = ~0;
+
+    private static readonly Collider[] separationHits = new Collider[16];
+    private Transform slotTarget;
+
     private NavMeshAgent agent;
     private EnemyAggro aggro;
     private float nextRetargetTime;
@@ -66,6 +79,7 @@ public class EnemyAI : MonoBehaviour
         {
             SetState(EnemyState.Dead);
             StopAgent();
+            ReleaseSlot();
             return;
         }
 
@@ -77,15 +91,23 @@ public class EnemyAI : MonoBehaviour
 
         if (target == null)
         {
+            ReleaseSlot();
             Patrol();
             return;
+        }
+
+        if (surroundTarget && slotTarget != target)
+        {
+            EnemySurroundSlots.Assign(this, target);
+            slotTarget = target;
         }
 
         // 거리 제한은 EnemyAggro.SelectTarget이 이미 적용했다.
         float sqrDistance = (target.position - transform.position).sqrMagnitude;
         float attackRange = enemyAttack.AttackRange;
 
-        if (sqrDistance <= attackRange * attackRange)
+        // 무리 안에서는 사거리에 들어와도 자기 슬롯에 닿은 뒤 공격해 한쪽에 몰리지 않게 한다.
+        if (sqrDistance <= attackRange * attackRange && !NeedsToReachSlot())
         {
             Attack();
         }
@@ -93,6 +115,99 @@ public class EnemyAI : MonoBehaviour
         {
             Chase();
         }
+
+        ApplySeparation();
+    }
+
+    private void OnDisable()
+    {
+        ReleaseSlot();
+    }
+
+    private void ReleaseSlot()
+    {
+        if (slotTarget == null) return;
+        EnemySurroundSlots.Release(this);
+        slotTarget = null;
+    }
+
+    // 근처까지 오면 플레이어 둘레의 자기 슬롯을 향한다. 멀리서는 직진.
+    private Vector3 GetChaseDestination()
+    {
+        Vector3 targetPosition = target.position;
+        if (!surroundTarget || EnemySurroundSlots.CountFor(target) <= 1)
+            return targetPosition;
+
+        float attackRange = enemyAttack.AttackRange;
+        float engage = attackRange * surroundEngageRangeMultiplier;
+        if ((targetPosition - transform.position).sqrMagnitude > engage * engage)
+            return targetPosition;
+
+        return TryGetSlotPosition(out Vector3 slot) ? slot : targetPosition;
+    }
+
+    // 플레이어 둘레의 자기 슬롯 위치. NavMesh 밖이면 false.
+    private bool TryGetSlotPosition(out Vector3 slot)
+    {
+        slot = default;
+        float attackRange = enemyAttack.AttackRange;
+        float angle = EnemySurroundSlots.GetSlotAngle(this, target);
+        float ring = Mathf.Max(0.5f, attackRange * 0.8f);
+        Vector3 point = target.position + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * ring;
+        if (!CanUseAgent() || !NavMesh.SamplePosition(point, out NavMeshHit hit, 1.5f, agent.areaMask))
+            return false;
+        slot = hit.position;
+        return true;
+    }
+
+    // 슬롯에서 멀면 아직 공격하지 않고 슬롯으로 이동한다.
+    // 이미 시작한 공격 주기는 끊지 않는다.
+    private bool NeedsToReachSlot()
+    {
+        if (!surroundTarget || EnemySurroundSlots.CountFor(target) <= 1 || enemyAttack.IsAttackCycleActive)
+            return false;
+        if (!TryGetSlotPosition(out Vector3 slot))
+            return false;
+        Vector3 offset = slot - transform.position;
+        offset.y = 0f;
+        float tolerance = Mathf.Max(0.4f, agent.radius * 1.5f);
+        return offset.sqrMagnitude > tolerance * tolerance;
+    }
+
+    // NavMesh 회피만으로는 공격 중(정지) 적끼리 겹친다. 정지·추적 중 모두 가볍게 밀어낸다.
+    private void ApplySeparation()
+    {
+        if (!CanUseAgent() || separationSpeed <= 0f) return;
+
+        float radius = agent.radius;
+        float probe = radius * 2f * separationRadiusMultiplier;
+        int count = Physics.OverlapSphereNonAlloc(transform.position, probe, separationHits, separationLayers,
+            QueryTriggerInteraction.Ignore);
+        Vector3 push = Vector3.zero;
+        for (int i = 0; i < count; i++)
+        {
+            Collider hit = separationHits[i];
+            separationHits[i] = null;
+            if (hit == null) continue;
+            EnemyAI other = hit.GetComponentInParent<EnemyAI>();
+            if (other == null || other == this || other.enemyHealth.IsDead) continue;
+
+            Vector3 away = transform.position - other.transform.position;
+            away.y = 0f;
+            float minDistance = (radius + other.agent.radius) * separationRadiusMultiplier;
+            float distance = away.magnitude;
+            if (distance >= minDistance) continue;
+            if (distance < 0.001f)
+            {
+                // 완전히 겹치면 인스턴스 순서로 방향을 정해 둘이 같은 쪽으로 밀리지 않게 한다.
+                away = GetInstanceID() < other.GetInstanceID() ? transform.right : -transform.right;
+                distance = 0f;
+            }
+            push += away.normalized * ((minDistance - distance) / minDistance);
+        }
+
+        if (push.sqrMagnitude < 0.0001f) return;
+        agent.Move(Vector3.ClampMagnitude(push, 1f) * (separationSpeed * Time.deltaTime));
     }
 
     // 대기 상태
@@ -181,7 +296,7 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        agent.SetDestination(target.position);
+        agent.SetDestination(GetChaseDestination());
         nextRepathTime = Time.time + RepathRate;
     }
 
@@ -322,6 +437,9 @@ public class EnemyAI : MonoBehaviour
         patrolWaitTime = Mathf.Max(0f, patrolWaitTime);
         patrolPointTolerance = Mathf.Max(0.1f, patrolPointTolerance);
         patrolSampleAttempts = Mathf.Max(1, patrolSampleAttempts);
+        surroundEngageRangeMultiplier = Mathf.Max(1f, surroundEngageRangeMultiplier);
+        separationRadiusMultiplier = Mathf.Max(1f, separationRadiusMultiplier);
+        separationSpeed = Mathf.Max(0f, separationSpeed);
 
         if (Application.isPlaying)
         {

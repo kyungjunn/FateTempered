@@ -580,6 +580,7 @@ GameObject:
   - component: {fileID: 8351431350733202375}
   - component: {fileID: 7320460934387054071}
   - component: {fileID: 870079413234327474}
+  - component: {fileID: 5943094642595810479}
   m_Layer: 0
   m_Name: BasePlayer
   m_TagString: Player
@@ -1098,6 +1099,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9fa646f5039c54ef99dbdfba7684697b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerSkillInput
+--- !u!114 &5943094642595810479
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8888413459189353256}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 075d294307e54422eb7432602894a7b6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkPlayerProgress
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!1001 &2674707629645099891
 PrefabInstance:
   m_ObjectHideFlags: 0

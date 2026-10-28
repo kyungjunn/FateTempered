@@ -23,11 +23,6 @@ public class InGameExpUI : MonoBehaviour
 
     private void OnEnable()
     {
-        if (NetworkGameSession.IsNetworkSessionActive)
-        {
-            gameObject.SetActive(false);
-            return;
-        }
         GameManager.OnLocalPlayerChanged += BindLevelSystem;
         // 이벤트 + 현재 스냅샷
         BindLevelSystem(GameManager.Instance?.CurrentPlayer);

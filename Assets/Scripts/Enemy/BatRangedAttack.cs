@@ -1,3 +1,4 @@
+using Unity.Netcode;
 using UnityEngine;
 
 // 기존 공격 애니메이션 이벤트에서 근접 타격 대신 음파를 발사
@@ -22,15 +23,30 @@ public sealed class BatRangedAttack : EnemyAttack
         direction.Normalize();
 
         GameObject instance = Instantiate(projectilePrefab, spawnPosition, Quaternion.LookRotation(direction));
-        if (instance.TryGetComponent(out BatSonicProjectile projectile))
-        {
-            projectile.Launch(transform, direction, CurrentAttackDamage);
-        }
-        else
+        if (!instance.TryGetComponent(out BatSonicProjectile projectile))
         {
             Debug.LogWarning("박쥐 음파 프리팹에 BatSonicProjectile이 없습니다.", this);
             Destroy(instance);
+            return;
         }
+
+        // 네트워크 적은 서버가 투사체도 Spawn한다. 같은 씬에 두어 Map 언로드 시 함께 정리.
+        NetworkObject owner = GetComponent<NetworkObject>();
+        if (owner != null && owner.IsSpawned)
+        {
+            if (!instance.TryGetComponent(out NetworkObject projectileObject))
+            {
+                Debug.LogError("네트워크 박쥐 음파 프리팹에 NetworkObject가 필요합니다.", this);
+                Destroy(instance);
+                return;
+            }
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(instance, gameObject.scene);
+            projectileObject.Spawn(true);
+            projectile.Launch(transform, direction, CurrentAttackDamage);
+            return;
+        }
+
+        projectile.Launch(transform, direction, CurrentAttackDamage);
     }
 
     protected override void OnValidate()

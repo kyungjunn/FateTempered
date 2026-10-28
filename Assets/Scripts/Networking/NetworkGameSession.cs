@@ -1287,6 +1287,8 @@ public sealed class NetworkGameSession : MonoBehaviour
 
         localCombatReady = localCombatPrepared;
         SetState(NetworkGameSessionState.Running, "All participants loaded and spawned. Combat is running.", null);
+        if (SpawnManager.Instance == null || !SpawnManager.Instance.BeginNetworkEnemySpawning(map, spawnedPlayers.Count))
+            BeginStop("The server could not start network enemy spawning.", true, false);
     }
 
     private bool SpawnFrozenPlayers(Scene map, out string spawnError)

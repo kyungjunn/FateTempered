@@ -28,6 +28,11 @@ public sealed class PassiveEnemyRoamer : MonoBehaviour
 
     private void Update()
     {
+        if (!NetworkAuthority.CanSimulate(gameObject))
+        {
+            enabled = false;
+            return;
+        }
         if (health.IsDead || !agent.enabled || !agent.isOnNavMesh || agent.pathPending) return;
         if (agent.hasPath && agent.pathStatus == NavMeshPathStatus.PathComplete
             && !float.IsInfinity(agent.remainingDistance)

@@ -11,9 +11,10 @@ public class PlayerLevelSystem : MonoBehaviour
     public Action onExpChanged;
     public Action onLevelUp;
 
+    // 오프라인 또는 서버만 계산한다. 클라이언트는 NetworkPlayerProgress 스냅샷을 받는다.
     public void AddExp(int amount)
     {
-        if (NetworkGameSession.IsNetworkSessionActive) return;
+        if (amount <= 0 || !NetworkAuthority.CanSimulate(gameObject)) return;
         currentExp += amount;
 
         while (currentExp >= requiredExp)
@@ -31,6 +32,9 @@ public class PlayerLevelSystem : MonoBehaviour
         requiredExp = Mathf.RoundToInt(requiredExp * levelUpExp);
         onLevelUp?.Invoke();
 
+        // 네트워크 증강 선택은 아직 지원하지 않는다. 레벨만 오른다.
+        if (NetworkGameSession.IsNetworkSessionActive) return;
+
         if (UIManager.Instance != null)
         {
             UIManager.Instance.RequestAugmentChoice();
@@ -41,6 +45,17 @@ public class PlayerLevelSystem : MonoBehaviour
         }
 
         Debug.Log($"레벨업! 다음 레벨 요구 경험치: {requiredExp}");
+    }
+
+    public void ApplyReplicated(int replicatedLevel, int replicatedExp, int replicatedRequiredExp)
+    {
+        if (NetworkAuthority.CanSimulate(gameObject)) return;
+        bool leveledUp = replicatedLevel > level;
+        level = Mathf.Max(1, replicatedLevel);
+        currentExp = Mathf.Max(0, replicatedExp);
+        requiredExp = Mathf.Max(1, replicatedRequiredExp);
+        if (leveledUp) onLevelUp?.Invoke();
+        onExpChanged?.Invoke();
     }
 
     public float GetExpPercent()

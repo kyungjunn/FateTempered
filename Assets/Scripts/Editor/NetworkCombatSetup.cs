@@ -82,6 +82,7 @@ public static class NetworkCombatSetup
             finally { Object.DestroyImmediate(instance); }
         }
         registry.Add(new NetworkPrefab { Prefab = target });
+        NetworkEnemySetup.RegisterAll();
         EditorUtility.SetDirty(registry);
         AssetDatabase.SaveAssets();
         var scene = EditorSceneManager.OpenScene("Assets/Scenes/NetworkTest.unity");

@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.AI;
 using System;
-using Unity.VisualScripting;
 
 [RequireComponent(typeof(NavMeshAgent))]
 [RequireComponent(typeof(EnemyAttack))]
@@ -21,7 +20,6 @@ public class EnemyAI : MonoBehaviour
 
     [SerializeField] private EnemyStats stats;
     private Transform target;
-    [SerializeField] private string playerTag = "Player";
     [SerializeField] private float detectionRange = 12f;
     [SerializeField] private float rotationSpeed = 12f;
     [SerializeField] private float repathRate = 0.15f;
@@ -31,7 +29,11 @@ public class EnemyAI : MonoBehaviour
     [SerializeField] private float patrolPointTolerance = 0.7f;
     [SerializeField] private int patrolSampleAttempts = 8;
 
+    [SerializeField] private float retargetInterval = 0.2f;
+
     private NavMeshAgent agent;
+    private EnemyAggro aggro;
+    private float nextRetargetTime;
     private EnemyAttack enemyAttack;
     private EnemyHealth enemyHealth;
     private EnemyState currentState;
@@ -47,36 +49,17 @@ public class EnemyAI : MonoBehaviour
         agent = GetComponent<NavMeshAgent>();
         enemyAttack = GetComponent<EnemyAttack>();
         enemyHealth = GetComponent<EnemyHealth>();
+        aggro = GetComponent<EnemyAggro>();
+        if (aggro == null) aggro = gameObject.AddComponent<EnemyAggro>();
 
         ApplyStatsToAgent();
     }
 
-    // 플레이어 스폰 시 이벤트 구독.
-    private void OnEnable()
-    {
-        GameManager.OnLocalPlayerChanged += AssignTarget;
-        AssignTarget(GameManager.Instance != null ? GameManager.Instance.CurrentPlayer : null);
-    }
-
-    private void OnDisable()
-    {
-        GameManager.OnLocalPlayerChanged -= AssignTarget;
-    }
-
-    private void Start()
-    {
-        if (NetworkGameSession.IsNetworkSessionActive) return;
-        if (target == null)
-        {
-            FindTarget();
-        }
-    }
-
     private void Update()
     {
-        if (NetworkGameSession.IsNetworkSessionActive)
+        if (!NetworkAuthority.CanSimulate(gameObject))
         {
-            StopAgent();
+            enabled = false;
             return;
         }
         if (enemyHealth.IsDead)
@@ -86,68 +69,29 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
+        if (Time.time >= nextRetargetTime)
+        {
+            target = aggro.SelectTarget(transform.position, DetectionRange);
+            nextRetargetTime = Time.time + retargetInterval;
+        }
+
         if (target == null)
         {
-            // 밑에서 이미 범위로 감지 중이기 때문에 매 프레임 타겟 설정하는 코드 주석처리
-            //FindTarget();
             Patrol();
-            //Debug.Log("Target null");
-
             return;
         }
 
+        // 거리 제한은 EnemyAggro.SelectTarget이 이미 적용했다.
         float sqrDistance = (target.position - transform.position).sqrMagnitude;
         float attackRange = enemyAttack.AttackRange;
-        float currentDetectionRange = DetectionRange;
-
 
         if (sqrDistance <= attackRange * attackRange)
         {
             Attack();
-            //Debug.Log("Enemy Attack");
-
-            //return;
-        }
-        else if (sqrDistance <= currentDetectionRange * currentDetectionRange)
-        {
-            Chase();
-            //Debug.Log("Enemy Chase");
-
-            //return;
         }
         else
         {
-            Patrol();
-        }
-    }
-
-    public void SetTarget(Transform newTarget)
-    {
-        if (NetworkGameSession.IsNetworkSessionActive) return;
-        target = newTarget;
-    }
-
-    // 플레이어 스폰 시 타겟 설정
-    private void AssignTarget(GameObject player)
-    {
-        target = !NetworkGameSession.IsNetworkSessionActive && player != null ? player.transform : null;
-    }
-
-    // Player 태그를 가진 오브젝트를 추적 대상으로 설정
-    private void FindTarget()
-    {
-        if (string.IsNullOrWhiteSpace(playerTag))
-        {
-            return;
-        }
-
-        GameObject player = GameObject.FindGameObjectWithTag(playerTag);
-
-        if (player != null)
-        {
-            target = player.transform;
-            //Debug.Log("Find Target ");
-
+            Chase();
         }
     }
 
@@ -373,6 +317,7 @@ public class EnemyAI : MonoBehaviour
         detectionRange = Mathf.Max(0.1f, detectionRange);
         rotationSpeed = Mathf.Max(0.1f, rotationSpeed);
         repathRate = Mathf.Max(0.02f, repathRate);
+        retargetInterval = Mathf.Max(0.05f, retargetInterval);
         patrolRadius = Mathf.Max(0.1f, patrolRadius);
         patrolWaitTime = Mathf.Max(0f, patrolWaitTime);
         patrolPointTolerance = Mathf.Max(0.1f, patrolPointTolerance);

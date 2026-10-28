@@ -44,6 +44,7 @@ public class PlayerHealth : LivingEntity
 
     private void OnEnable()
     {
+        EnemyTargetRegistry.Register(this);
         if (stats != null)
         {
             stats.onStatsChanged += HandleStatsChanged;
@@ -52,6 +53,7 @@ public class PlayerHealth : LivingEntity
 
     private void OnDisable()
     {
+        EnemyTargetRegistry.Unregister(this);
         if (stats != null)
         {
             stats.onStatsChanged -= HandleStatsChanged;

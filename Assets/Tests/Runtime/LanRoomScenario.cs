@@ -192,11 +192,20 @@ public sealed class LanRoomScenario : MonoBehaviour
             int listeners = 0;
             foreach (var listener in FindObjectsByType<AudioListener>(FindObjectsSortMode.None)) if (listener.enabled) listeners++;
             Require(listeners == 1, "Exactly one active audio listener.");
-            Require(FindObjectsByType<EnemyAI>(FindObjectsSortMode.None).Length == 0, "Unsupported enemy spawning disabled.");
             var level = player.GetComponent<PlayerLevelSystem>();
-            int xp = level.currentExp;
-            level.AddExp(500);
-            Require(level.currentExp == xp, "Direct network XP mutation rejected.");
+            if (host)
+            {
+                int xp = level.currentExp;
+                level.AddExp(1);
+                Require(level.currentExp == xp + 1 || level.level > 1, "Server applies authoritative XP.");
+            }
+            else
+            {
+                int xp = level.currentExp;
+                level.AddExp(500);
+                Require(level.currentExp == xp, "Client XP mutation rejected.");
+            }
+            if (cycle == 1) yield return VerifyNetworkEnemies(host);
             Click("OpenLeaveButton");
             Require(Time.timeScale == 1f && !GameManager.Instance.IsPaused, "Local menu does not pause server time.");
             Require(!player.GetComponent<PlayerInput>().enabled, "Menu blocks local input.");
@@ -234,6 +243,77 @@ public sealed class LanRoomScenario : MonoBehaviour
         }
         yield return HostLossAndSolo();
     }
+
+    // 서버 적 스폰·복제, 마지막 공격자 어그로, 공동 처치 경험치를 검증한다.
+    private IEnumerator VerifyNetworkEnemies(bool host)
+    {
+        yield return Wait(() => EnemyCount() > 0, "replicated network enemies", 30);
+        foreach (EnemyAI ai in FindObjectsByType<EnemyAI>(FindObjectsSortMode.None))
+        {
+            Require(ai.GetComponent<NetworkObject>().IsSpawned, "Every enemy is a spawned NetworkObject.");
+            Require(ai.enabled == host, "Enemy AI runs only on the server.");
+            var agent = ai.GetComponent<UnityEngine.AI.NavMeshAgent>();
+            Require(agent.enabled == host || ai.GetComponent<EnemyHealth>().IsDead, "NavMeshAgent runs only on the server.");
+        }
+        var local = GameManager.Instance.CurrentPlayer.GetComponent<PlayerLevelSystem>();
+        int startLevel = local.level;
+        int startExp = local.currentExp;
+        Mark(host ? "host-enemy-baseline" : "guest-enemy-baseline", 1, startLevel + ":" + startExp);
+
+        if (host)
+        {
+            yield return Wait(() => MarkExists("guest-enemy-baseline", 1), "guest XP baseline");
+            NetworkObject guestObject = null;
+            foreach (NetworkObject candidate in FindObjectsByType<NetworkObject>(FindObjectsSortMode.None))
+                if (candidate.IsPlayerObject && !candidate.IsOwner) guestObject = candidate;
+            Require(guestObject != null, "Server sees the guest PlayerObject.");
+            var hostDealer = GameManager.Instance.CurrentPlayer.GetComponent<PlayerDamageDealer>();
+            var guestDealer = guestObject.GetComponent<PlayerDamageDealer>();
+            Require(hostDealer != null && guestDealer != null, "Both players deal damage through PlayerDamageDealer.");
+            var guestLevel = guestObject.GetComponent<PlayerLevelSystem>();
+            int guestExp = guestLevel.currentExp, guestLvl = guestLevel.level;
+            int hostExp = local.currentExp, hostLvl = local.level;
+
+            EnemyHealth target = null;
+            foreach (EnemyHealth candidate in FindObjectsByType<EnemyHealth>(FindObjectsSortMode.None))
+                if (!candidate.IsDead && candidate.GetComponent<EnemyAI>() != null && candidate.ExpReward > 0) { target = candidate; break; }
+            Require(target != null, "A living hostile enemy exists.");
+            var agent = target.GetComponent<UnityEngine.AI.NavMeshAgent>();
+            Vector3 hostPos = GameManager.Instance.CurrentPlayer.transform.position;
+            if (UnityEngine.AI.NavMesh.SamplePosition(hostPos + Vector3.right * 4f, out var hit, 6f, agent.areaMask))
+                agent.Warp(hit.position);
+            guestObject.transform.position = target.transform.position + Vector3.forward * 3f;
+
+            hostDealer.DealDamage(target, 1, PlayerDamageType.BasicAttack);
+            guestDealer.DealDamage(target, 1, PlayerDamageType.BasicAttack);
+            var aggro = target.GetComponent<EnemyAggro>();
+            Require(aggro.Contributors.Count == 2, "Both attackers recorded as contributors.");
+            // 직전 타겟의 최소 유지 시간(0.5초)이 지나면 마지막 공격자로 전환돼야 한다.
+            yield return Wait(() => aggro.SelectTarget(target.transform.position, 50f) == guestObject.transform,
+                "last attacker becomes the aggro target", 3);
+            int reward = target.ExpReward;
+            hostDealer.DealDamage(target, target.CurrentHealth, PlayerDamageType.BasicAttack);
+            Require(target.IsDead, "Shared enemy dies on the server.");
+            Require(Gained(local, hostLvl, hostExp, reward) && Gained(guestLevel, guestLvl, guestExp, reward),
+                "Both contributors receive the full reward on the server.");
+            Mark("enemy-shared-kill", 1, reward.ToString());
+            yield return Wait(() => target == null, "dead enemy despawns", 10);
+        }
+        else
+        {
+            yield return Wait(() => MarkExists("enemy-shared-kill", 1), "server shared kill", 30);
+            int reward = int.Parse(File.ReadAllText(Path.Combine(directory, "enemy-shared-kill-1")));
+            yield return Wait(() => Gained(local, startLevel, startExp, reward), "client XP replicated from shared kill", 10);
+        }
+        Record((host ? "host" : "guest") + " network enemy, aggro and shared XP verified");
+    }
+
+    private static bool Gained(PlayerLevelSystem level, int startLevel, int startExp, int reward)
+    {
+        return level.level > startLevel || level.currentExp >= startExp + reward;
+    }
+
+    private int EnemyCount() => FindObjectsByType<EnemyHealth>(FindObjectsSortMode.None).Length;
 
     private IEnumerator ProbeAdmissions()
     {

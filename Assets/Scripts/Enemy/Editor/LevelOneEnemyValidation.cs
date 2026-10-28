@@ -226,7 +226,6 @@ public static class LevelOneEnemyValidation
                 yield return null;
                 continue;
             }
-            ai.SetTarget(player.transform);
             float until = Time.time + 0.6f;
             while (Time.time < until) yield return null;
             Require(agent.isOnNavMesh && enemy.transform.position.z > 0.1f && ai.CurrentState == EnemyAI.EnemyState.Chase,

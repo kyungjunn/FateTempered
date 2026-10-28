@@ -16,10 +16,11 @@ public class EnemyHealth : MonoBehaviour, IDamageable
 
     private bool hasReplicatedHealthSnapshot;
     private int replicatedMaxHealth;
+    private float healthMultiplier = 1f;
 
     public int MaxHealth => hasReplicatedHealthSnapshot
         ? replicatedMaxHealth
-        : stats != null ? stats.MaxHealth : maxHealth;
+        : Mathf.Max(1, Mathf.RoundToInt((stats != null ? stats.MaxHealth : maxHealth) * healthMultiplier));
     public int ExpReward => stats != null ? stats.ExpReward : expReward;
     public int CurrentHealth { get; private set; }
     public bool IsDead { get; private set; }
@@ -31,17 +32,28 @@ public class EnemyHealth : MonoBehaviour, IDamageable
     private EnemyHitFeedback hitFeedback;
     private bool expAwarded;
     private bool deathHandled;
-    private PlayerDamageDealer lastDamageSource;
+    private EnemyAggro aggro;
 
     public void RecordDamageSource(PlayerDamageDealer source)
     {
-        if (NetworkAuthority.CanSimulate(gameObject)) lastDamageSource = source;
+        if (NetworkAuthority.CanSimulate(gameObject) && aggro != null) aggro.RecordHit(source);
+    }
+
+    // 협동 난이도. 서버가 Spawn 전에 한 번 적용한다.
+    public void ApplyHealthMultiplier(float multiplier)
+    {
+        if (!NetworkAuthority.CanSimulate(gameObject) || IsDead) return;
+        healthMultiplier = Mathf.Max(0.1f, multiplier);
+        CurrentHealth = MaxHealth;
+        OnHealthChanged?.Invoke(CurrentHealth, MaxHealth);
     }
 
     private void Awake()
     {
         enemyAnimator = GetComponent<EnemyAnimator>();
         hitFeedback = GetComponent<EnemyHitFeedback>();
+        aggro = GetComponent<EnemyAggro>();
+        if (aggro == null) aggro = gameObject.AddComponent<EnemyAggro>();
 
         if (hitFeedback == null)
         {
@@ -114,7 +126,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
 
         deathHandled = true;
         IsDead = true;
-        RunStats.AddKill();   // ← 추가: 엔딩 화면의 Monster Kills 집계
+        RunStats.AddKill();
         AwardExpOnce();
         OnEnemyKilled?.Invoke(this);
         ApplyDeathPresentation();
@@ -163,7 +175,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
         }
     }
 
-    // 처치 보상 경험치를 플레이어 레벨 시스템에 1회 지급
+    // 처치 보상 경험치를 1회 지급. 네트워크는 피해를 준 플레이어 전원이 전액을 받는다.
     private void AwardExpOnce()
     {
         if (expAwarded || ExpReward <= 0)
@@ -174,16 +186,20 @@ public class EnemyHealth : MonoBehaviour, IDamageable
         expAwarded = true;
 
         var networkObject = GetComponent<NetworkObject>();
-        GameObject playerObject = networkObject != null && networkObject.IsSpawned
-            ? lastDamageSource != null ? lastDamageSource.gameObject : null
-            : GameObject.FindGameObjectWithTag("Player");
-
-        if (playerObject == null)
+        if (networkObject != null && networkObject.IsSpawned)
         {
+            foreach (PlayerDamageDealer contributor in aggro.Contributors)
+            {
+                if (contributor == null) continue;
+                if (contributor.TryGetComponent(out PlayerHealth health) && health.IsDead) continue;
+                if (contributor.TryGetComponent(out PlayerLevelSystem contributorLevel))
+                    contributorLevel.AddExp(ExpReward);
+            }
             return;
         }
 
-        if (playerObject.TryGetComponent(out PlayerLevelSystem levelSystem))
+        GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
+        if (playerObject != null && playerObject.TryGetComponent(out PlayerLevelSystem levelSystem))
         {
             levelSystem.AddExp(ExpReward);
         }

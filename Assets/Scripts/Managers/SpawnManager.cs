@@ -36,6 +36,12 @@ public class SpawnManager : MonoBehaviour
     [SerializeField] private int maxEnemiesIncreasePerStep = 2;
     [SerializeField] private int maximumAliveEnemies = 24;
 
+    [Header("Co-op Scaling (2 players)")]
+    [SerializeField] private float coopMaxAliveMultiplier = 1.6f;
+    [SerializeField] private float coopSpawnIntervalMultiplier = 0.75f;
+    [SerializeField] private int coopExtraEnemiesPerSpawn = 1;
+    [SerializeField] private float coopEnemyHealthMultiplier = 1.4f;
+
     [Header("Spawn Distance")]
     [SerializeField] private float minSpawnDistanceFromPlayer = 8f;
     [SerializeField] private float maxSpawnDistanceFromPlayer = 60f;
@@ -50,17 +56,42 @@ public class SpawnManager : MonoBehaviour
     private Coroutine enemySpawnRoutine;
     private float spawnStartTime;
     private bool sessionEnded;
+    private bool networkEnemySpawning;
+    private Scene networkMapScene;
+    private int matchPlayerCount = 1;
 
     public int AliveEnemyCount
     {
         get
         {
-            if (CanRunOfflineSpawning) RemoveInactiveEnemies();
+            if (CanRunEnemySpawning) RemoveInactiveEnemies();
             return activeEnemies.Count;
         }
     }
 
     private bool CanRunOfflineSpawning => !sessionEnded && !NetworkGameSession.IsNetworkSessionActive;
+
+    // 오프라인 또는 네트워크 서버의 진행 중 전투.
+    private bool CanRunEnemySpawning => !sessionEnded && (!NetworkGameSession.IsNetworkSessionActive ||
+        (networkEnemySpawning && IsNetworkServer() && networkMapScene.IsValid() && networkMapScene.isLoaded));
+
+    private static bool IsNetworkServer()
+    {
+        NetworkManager manager = NetworkManager.Singleton;
+        return manager != null && manager.IsListening && manager.IsServer;
+    }
+
+    // 현재 접속 중인 전투 인원. 팀원이 나가면 스폰 배율만 낮아진다.
+    private bool IsCoop => NetworkGameSession.IsNetworkSessionActive && CountLivePlayers() >= 2 && matchPlayerCount >= 2;
+
+    private static int CountLivePlayers()
+    {
+        int count = 0;
+        IReadOnlyList<PlayerHealth> players = EnemyTargetRegistry.Players;
+        for (int i = 0; i < players.Count; i++)
+            if (players[i] != null && players[i].isActiveAndEnabled) count++;
+        return count;
+    }
 
     private void Awake()
     {
@@ -95,6 +126,8 @@ public class SpawnManager : MonoBehaviour
     {
         if (sessionEnded) return;
         sessionEnded = true;
+        networkEnemySpawning = false;
+        networkMapScene = default;
         StopEnemyAutoSpawn();
         UnbindPlayerLevelSystem();
         ResetEnemyUnlockSpawns();
@@ -251,10 +284,70 @@ public class SpawnManager : MonoBehaviour
         return indices;
     }
 
+    // 서버: 모든 참가자의 PlayerObject가 Spawn되고 Running이 공개된 뒤 호출한다.
+    public bool BeginNetworkEnemySpawning(Scene map, int playerCount)
+    {
+        if (!NetworkGameSession.IsNetworkSessionActive || sessionEnded || networkEnemySpawning ||
+            !IsNetworkServer() || !map.IsValid() || !map.isLoaded || map.name != "Map")
+        {
+            Debug.LogError("Network enemy spawning requires the server, an active session, and a loaded Map.", this);
+            return false;
+        }
+        if (!ValidateNetworkEnemyPrefabs(out string error))
+        {
+            Debug.LogError(error, this);
+            return false;
+        }
+
+        networkEnemySpawning = true;
+        networkMapScene = map;
+        matchPlayerCount = Mathf.Max(1, playerCount);
+        spawnStartTime = Time.time;
+        ResetEnemyUnlockSpawns();
+        BindNetworkLevelSystems();
+        CacheEnemySpawnPoints();
+        SpawnInitialEnemies();
+        if (!CanRunEnemySpawning) return false;
+        StartEnemyAutoSpawn();
+        TrySpawnUnlockEnemies();
+        return true;
+    }
+
+    private bool ValidateNetworkEnemyPrefabs(out string error)
+    {
+        error = null;
+        NetworkManager manager = NetworkManager.Singleton;
+        var prefabs = new List<GameObject>();
+        if (enemyPrefab != null) prefabs.Add(enemyPrefab);
+        if (enemySpawnEntries != null)
+            foreach (EnemySpawnEntry entry in enemySpawnEntries)
+                if (entry != null && entry.Prefab != null) prefabs.Add(entry.Prefab);
+
+        foreach (GameObject prefab in prefabs)
+        {
+            if (!prefab.TryGetComponent(out NetworkObject _) || !manager.NetworkConfig.Prefabs.Contains(prefab))
+            {
+                error = $"Enemy prefab '{prefab.name}' must have a NetworkObject and be registered with NGO.";
+                return false;
+            }
+        }
+        return true;
+    }
+
     private void CacheEnemySpawnPoints()
     {
-        if (!CanRunOfflineSpawning) return;
+        if (!CanRunEnemySpawning) return;
         enemySpawnPoints.Clear();
+
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            // 네트워크: 세션이 소유한 Map 씬 안에서만 찾는다.
+            foreach (GameObject root in networkMapScene.GetRootGameObjects())
+                foreach (Transform candidate in root.GetComponentsInChildren<Transform>(true))
+                    if (candidate.CompareTag("EnemySpawnPoint"))
+                        enemySpawnPoints.Add(candidate);
+            return;
+        }
 
         // Map 씬에 배치된 EnemySpawnPoint 태그 오브젝트를 캐싱
         GameObject[] points = GameObject.FindGameObjectsWithTag("EnemySpawnPoint");
@@ -298,7 +391,7 @@ public class SpawnManager : MonoBehaviour
 
     private void SpawnInitialEnemies()
     {
-        if (!CanRunOfflineSpawning || !spawnEnemiesOnStart || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
+        if (!CanRunEnemySpawning || !spawnEnemiesOnStart || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
         {
             return;
         }
@@ -338,7 +431,7 @@ public class SpawnManager : MonoBehaviour
 
     private void StartEnemyAutoSpawn()
     {
-        if (!CanRunOfflineSpawning || !enableEnemyAutoSpawn || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
+        if (!CanRunEnemySpawning || !enableEnemyAutoSpawn || !HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0)
         {
             return;
         }
@@ -360,10 +453,10 @@ public class SpawnManager : MonoBehaviour
 
     private IEnumerator EnemySpawnRoutine()
     {
-        while (CanRunOfflineSpawning)
+        while (CanRunEnemySpawning)
         {
             yield return new WaitForSeconds(GetCurrentSpawnInterval());
-            if (!CanRunOfflineSpawning) yield break;
+            if (!CanRunEnemySpawning) yield break;
 
             if (GameManager.Instance != null && GameManager.Instance.IsPaused)
             {
@@ -385,7 +478,7 @@ public class SpawnManager : MonoBehaviour
 
     private bool TrySpawnRandomEnemy()
     {
-        if (!CanRunOfflineSpawning) return false;
+        if (!CanRunEnemySpawning) return false;
         RemoveInactiveEnemies();
 
         if (!HasAnyEnemyPrefab() || enemySpawnPoints.Count == 0 || activeEnemies.Count >= GetCurrentMaxAliveEnemies())
@@ -425,13 +518,9 @@ public class SpawnManager : MonoBehaviour
         return FindFallbackEnemySpawnPoint();
     }
 
+    // 모든 플레이어에게서 가장 먼 지점(가장 가까운 플레이어까지 거리가 최대인 지점).
     private Transform FindFallbackEnemySpawnPoint()
     {
-        if (spawnedPlayer == null)
-        {
-            return enemySpawnPoints[UnityEngine.Random.Range(0, enemySpawnPoints.Count)];
-        }
-
         Transform fallback = null;
         float farthestDistance = float.MinValue;
 
@@ -442,7 +531,10 @@ public class SpawnManager : MonoBehaviour
                 continue;
             }
 
-            float sqrDistance = (spawnPoint.position - spawnedPlayer.transform.position).sqrMagnitude;
+            if (!EnemyTargetRegistry.TryGetClosestSqrDistance(spawnPoint.position, out float sqrDistance))
+            {
+                return enemySpawnPoints[UnityEngine.Random.Range(0, enemySpawnPoints.Count)];
+            }
 
             if (sqrDistance > farthestDistance)
             {
@@ -456,12 +548,16 @@ public class SpawnManager : MonoBehaviour
 
     private bool IsValidEnemySpawnPoint(Transform spawnPoint)
     {
-        if (spawnPoint == null || spawnedPlayer == null)
+        if (spawnPoint == null)
         {
-            return spawnPoint != null;
+            return false;
         }
 
-        float sqrDistance = (spawnPoint.position - spawnedPlayer.transform.position).sqrMagnitude;
+        if (!EnemyTargetRegistry.TryGetClosestSqrDistance(spawnPoint.position, out float sqrDistance))
+        {
+            return true;
+        }
+
         float minSqrDistance = minSpawnDistanceFromPlayer * minSpawnDistanceFromPlayer;
 
         if (sqrDistance < minSqrDistance)
@@ -480,16 +576,47 @@ public class SpawnManager : MonoBehaviour
 
     private GameObject SpawnEnemyAt(Transform spawnPoint, GameObject prefab, Vector3? position = null)
     {
-        if (!CanRunOfflineSpawning || spawnPoint == null || prefab == null)
+        if (!CanRunEnemySpawning || spawnPoint == null || prefab == null)
         {
             return null;
         }
 
-        GameObject enemy = Instantiate(prefab, position ?? spawnPoint.position, spawnPoint.rotation);
+        Vector3 spawnPosition = position ?? spawnPoint.position;
+        if (NetworkGameSession.IsNetworkSessionActive)
+        {
+            return SpawnNetworkEnemy(prefab, spawnPosition, spawnPoint.rotation);
+        }
+
+        GameObject enemy = Instantiate(prefab, spawnPosition, spawnPoint.rotation);
         activeEnemies.Add(enemy);
         activeEnemyPrefabs[enemy] = prefab;
         return enemy;
     }
+
+    private GameObject SpawnNetworkEnemy(GameObject prefab, Vector3 position, Quaternion rotation)
+    {
+        GameObject enemy = null;
+        try
+        {
+            enemy = Instantiate(prefab, position, rotation);
+            SceneManager.MoveGameObjectToScene(enemy, networkMapScene);
+            if (IsCoop && enemy.TryGetComponent(out EnemyHealth health))
+                health.ApplyHealthMultiplier(coopEnemyHealthMultiplier);
+            enemy.GetComponent<NetworkObject>().Spawn(true);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError($"Failed to spawn network enemy '{prefab.name}': {exception.Message}", this);
+            if (enemy != null) Destroy(enemy);
+            return null;
+        }
+
+        activeEnemies.Add(enemy);
+        activeEnemyPrefabs[enemy] = prefab;
+        return enemy;
+    }
+
+    private readonly List<PlayerLevelSystem> boundLevelSystems = new List<PlayerLevelSystem>(2);
 
     private void BindPlayerLevelSystem(GameObject playerObject)
     {
@@ -501,6 +628,18 @@ public class SpawnManager : MonoBehaviour
         }
     }
 
+    private void BindNetworkLevelSystems()
+    {
+        UnbindPlayerLevelSystem();
+        IReadOnlyList<PlayerHealth> players = EnemyTargetRegistry.Players;
+        for (int i = 0; i < players.Count; i++)
+        {
+            if (players[i] == null || !players[i].TryGetComponent(out PlayerLevelSystem levelSystem)) continue;
+            levelSystem.onLevelUp += HandlePlayerLevelUp;
+            boundLevelSystems.Add(levelSystem);
+        }
+    }
+
     private void UnbindPlayerLevelSystem()
     {
         if (playerLevelSystem != null)
@@ -508,18 +647,22 @@ public class SpawnManager : MonoBehaviour
             playerLevelSystem.onLevelUp -= HandlePlayerLevelUp;
             playerLevelSystem = null;
         }
+
+        for (int i = 0; i < boundLevelSystems.Count; i++)
+            if (boundLevelSystems[i] != null) boundLevelSystems[i].onLevelUp -= HandlePlayerLevelUp;
+        boundLevelSystems.Clear();
     }
 
     private void HandlePlayerLevelUp()
     {
-        if (!CanRunOfflineSpawning) return;
+        if (!CanRunEnemySpawning) return;
         // 특정 레벨에 도달했을 때 Giant 같은 해금 적을 즉시 한 번 스폰
         TrySpawnUnlockEnemies();
     }
 
     private void TrySpawnUnlockEnemies()
     {
-        if (!CanRunOfflineSpawning || enemySpawnEntries == null)
+        if (!CanRunEnemySpawning || enemySpawnEntries == null)
         {
             return;
         }
@@ -535,7 +678,7 @@ public class SpawnManager : MonoBehaviour
 
         foreach (EnemySpawnEntry entry in enemySpawnEntries)
         {
-            if (!CanRunOfflineSpawning) return;
+            if (!CanRunEnemySpawning) return;
             if (!CanForceSpawnUnlockEnemy(entry, playerLevel))
             {
                 continue;
@@ -549,7 +692,7 @@ public class SpawnManager : MonoBehaviour
             }
 
             GameObject spawnedEnemy = SpawnEnemyAt(spawnPoint, entry.Prefab);
-            if (spawnedEnemy == null || !CanRunOfflineSpawning) return;
+            if (spawnedEnemy == null || !CanRunEnemySpawning) return;
             entry.MarkUnlockSpawned();
             Debug.Log($"Unlocked enemy spawned: {entry.Prefab.name} at player level {playerLevel}");
         }
@@ -636,8 +779,17 @@ public class SpawnManager : MonoBehaviour
         return entry.MaxAliveCount <= 0 || CountAliveEnemiesForPrefab(entry.Prefab) < entry.MaxAliveCount;
     }
 
+    // 적 종류 해금 기준: 플레이어 중 가장 높은 레벨.
     private int GetPlayerLevel()
     {
+        if (boundLevelSystems.Count > 0)
+        {
+            int highest = 1;
+            for (int i = 0; i < boundLevelSystems.Count; i++)
+                if (boundLevelSystems[i] != null) highest = Mathf.Max(highest, boundLevelSystems[i].level);
+            return highest;
+        }
+
         if (playerLevelSystem != null)
         {
             return playerLevelSystem.level;
@@ -666,32 +818,35 @@ public class SpawnManager : MonoBehaviour
     {
         if (!enableDynamicDifficulty)
         {
-            return enemySpawnInterval;
+            return IsCoop ? enemySpawnInterval * coopSpawnIntervalMultiplier : enemySpawnInterval;
         }
 
         float interval = enemySpawnInterval - GetDifficultyStep() * spawnIntervalDecreasePerStep;
-        return Mathf.Max(minimumSpawnInterval, interval);
+        interval = Mathf.Max(minimumSpawnInterval, interval);
+        return IsCoop ? interval * coopSpawnIntervalMultiplier : interval;
     }
 
     private int GetCurrentEnemiesPerSpawn()
     {
+        int coopExtra = IsCoop ? coopExtraEnemiesPerSpawn : 0;
         if (!enableDynamicDifficulty || extraEnemyEverySteps <= 0)
         {
-            return enemiesPerSpawn;
+            return enemiesPerSpawn + coopExtra;
         }
 
-        return enemiesPerSpawn + GetDifficultyStep() / extraEnemyEverySteps;
+        return enemiesPerSpawn + coopExtra + GetDifficultyStep() / extraEnemyEverySteps;
     }
 
     private int GetCurrentMaxAliveEnemies()
     {
+        float multiplier = IsCoop ? coopMaxAliveMultiplier : 1f;
         if (!enableDynamicDifficulty)
         {
-            return maxAliveEnemies;
+            return Mathf.RoundToInt(maxAliveEnemies * multiplier);
         }
 
         int currentMaximum = maxAliveEnemies + GetDifficultyStep() * maxEnemiesIncreasePerStep;
-        return Mathf.Min(maximumAliveEnemies, currentMaximum);
+        return Mathf.RoundToInt(Mathf.Min(maximumAliveEnemies, currentMaximum) * multiplier);
     }
 
     private bool HasAnyEnemyPrefab()
@@ -782,6 +937,10 @@ public class SpawnManager : MonoBehaviour
         minSpawnDistanceFromPlayer = Mathf.Max(0f, minSpawnDistanceFromPlayer);
         maxSpawnDistanceFromPlayer = Mathf.Max(0f, maxSpawnDistanceFromPlayer);
         spawnPointPickAttempts = Mathf.Max(1, spawnPointPickAttempts);
+        coopMaxAliveMultiplier = Mathf.Max(1f, coopMaxAliveMultiplier);
+        coopSpawnIntervalMultiplier = Mathf.Clamp(coopSpawnIntervalMultiplier, 0.1f, 1f);
+        coopExtraEnemiesPerSpawn = Mathf.Max(0, coopExtraEnemiesPerSpawn);
+        coopEnemyHealthMultiplier = Mathf.Max(1f, coopEnemyHealthMultiplier);
 
         if (enemySpawnEntries == null)
         {

@@ -36,7 +36,7 @@ public class EnemyAttack : MonoBehaviour
     // 공격 가능 상태일 때 공격 애니메이션을 재생하고 피해 적용을 예약
     public virtual bool TryAttack(Transform target)
     {
-        if (target == null || Time.time < nextAttackTime)
+        if (!NetworkAuthority.CanSimulate(gameObject) || target == null || Time.time < nextAttackTime)
         {
             return false;
         }
@@ -93,7 +93,8 @@ public class EnemyAttack : MonoBehaviour
 
     private void ApplyPendingAttackDamage()
     {
-        if (pendingDamageApplied || pendingTarget == null)
+        // 클라이언트 애니메이션 이벤트는 무시. 피해는 서버만.
+        if (!NetworkAuthority.CanSimulate(gameObject) || pendingDamageApplied || pendingTarget == null)
         {
             return;
         }

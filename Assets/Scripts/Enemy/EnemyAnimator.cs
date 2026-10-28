@@ -1,3 +1,4 @@
+using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -10,6 +11,7 @@ public class EnemyAnimator : MonoBehaviour
     [SerializeField] private float moveSpeedDampTime = 0.1f;
 
     private EnemyAttack enemyAttack;
+    private NetworkAnimator networkAnimator;
 
     private static readonly int MoveSpeedHash = Animator.StringToHash("MoveSpeed");
     private static readonly int AttackHash = Animator.StringToHash("Attack");
@@ -31,11 +33,13 @@ public class EnemyAnimator : MonoBehaviour
         }
 
         enemyAttack = GetComponent<EnemyAttack>();
+        networkAnimator = GetComponentInChildren<NetworkAnimator>();
     }
 
     private void Update()
     {
-        if (animator == null || agent == null)
+        // 클라이언트는 NetworkAnimator가 서버 MoveSpeed를 복제한다.
+        if (animator == null || agent == null || !NetworkAuthority.CanSimulate(gameObject))
         {
             return;
         }
@@ -90,15 +94,25 @@ public class EnemyAnimator : MonoBehaviour
             return;
         }
 
+        if (networkAnimator != null && networkAnimator.IsSpawned)
+        {
+            // 서버만 트리거를 복제한다. 클라이언트 사망 연출은 NetworkHealth 경로가 담당.
+            if (networkAnimator.IsServer) networkAnimator.SetTrigger(triggerHash);
+            return;
+        }
+
         animator.SetTrigger(triggerHash);
     }
 
     private void ResetTrigger(int triggerHash)
     {
-        if (animator != null)
+        if (animator == null) return;
+        if (networkAnimator != null && networkAnimator.IsSpawned)
         {
-            animator.ResetTrigger(triggerHash);
+            if (networkAnimator.IsServer) networkAnimator.ResetTrigger(triggerHash);
+            return;
         }
+        animator.ResetTrigger(triggerHash);
     }
 
     private void OnValidate()

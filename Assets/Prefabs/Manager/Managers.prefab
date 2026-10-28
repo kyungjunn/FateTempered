@@ -147,16 +147,16 @@ MonoBehaviour:
   spawnAllEnemyPointsOnStart: 1
   initialEnemyCount: 0
   enableEnemyAutoSpawn: 1
-  enemySpawnInterval: 5
+  enemySpawnInterval: 4.5
   enemiesPerSpawn: 1
-  maxAliveEnemies: 12
+  maxAliveEnemies: 14
   enableDynamicDifficulty: 1
   difficultyStepDuration: 60
   spawnIntervalDecreasePerStep: 0.4
-  minimumSpawnInterval: 2.5
+  minimumSpawnInterval: 2.2
   extraEnemyEverySteps: 3
   maxEnemiesIncreasePerStep: 2
-  maximumAliveEnemies: 24
+  maximumAliveEnemies: 28
   minSpawnDistanceFromPlayer: 8
   maxSpawnDistanceFromPlayer: 60
   spawnPointPickAttempts: 12

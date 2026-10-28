@@ -1,14 +1,14 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // 물리 충돌의 수직 밀림을 막으면서 보스 몸통은 수평으로 통과하지 못하게 한다.
+// 시뮬레이션 인스턴스(오프라인/서버)에서 모든 플레이어에 적용한다.
 public class BossPlayerCollisionGuard : MonoBehaviour
 {
     private Collider[] bossColliders;
     private CapsuleCollider bodyCollider;
-    private CapsuleCollider playerCollider;
-    private Rigidbody playerBody;
-    private Transform playerRoot;
     private EnemyHealth bossHealth;
+    private readonly HashSet<PlayerHealth> ignoredPlayers = new HashSet<PlayerHealth>();
 
     private void Awake()
     {
@@ -17,49 +17,16 @@ public class BossPlayerCollisionGuard : MonoBehaviour
         bossHealth = GetComponent<EnemyHealth>();
     }
 
-    private void OnEnable()
-    {
-        GameManager.OnLocalPlayerChanged += BindPlayer;
-        BindPlayer(GameManager.Instance != null ? GameManager.Instance.CurrentPlayer : null);
-    }
-
-    private void Start()
-    {
-        if (NetworkGameSession.IsNetworkSessionActive) return;
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-
-        if (player != null)
-        {
-            BindPlayer(player);
-        }
-    }
-
     private void OnDisable()
     {
-        GameManager.OnLocalPlayerChanged -= BindPlayer;
+        ignoredPlayers.Clear();
     }
 
-    private void BindPlayer(GameObject player)
+    private void IgnorePlayerCollisions(PlayerHealth player)
     {
-        if (NetworkGameSession.IsNetworkSessionActive || player == null)
-        {
-            playerRoot = null;
-            playerBody = null;
-            playerCollider = null;
-            return;
-        }
-
-        playerRoot = player.transform;
-        playerBody = player.GetComponent<Rigidbody>();
-        playerCollider = player.GetComponentInChildren<CapsuleCollider>();
-
-        if (bossColliders == null || bossColliders.Length == 0)
-        {
-            bossColliders = GetComponentsInChildren<Collider>();
-        }
+        if (!ignoredPlayers.Add(player)) return;
 
         Collider[] playerColliders = player.GetComponentsInChildren<Collider>();
-
         foreach (Collider bossCollider in bossColliders)
         {
             if (bossCollider == null || bossCollider.isTrigger)
@@ -80,17 +47,30 @@ public class BossPlayerCollisionGuard : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (NetworkGameSession.IsNetworkSessionActive) return;
-        if (bossHealth != null && bossHealth.IsDead)
+        if (!NetworkAuthority.CanSimulate(gameObject))
+        {
+            enabled = false;
+            return;
+        }
+        if ((bossHealth != null && bossHealth.IsDead) || bodyCollider == null || !bodyCollider.enabled)
         {
             return;
         }
 
-        if (bodyCollider == null || !bodyCollider.enabled || playerCollider == null
-            || !playerCollider.enabled || playerRoot == null)
+        IReadOnlyList<PlayerHealth> players = EnemyTargetRegistry.Players;
+        for (int i = 0; i < players.Count; i++)
         {
-            return;
+            PlayerHealth player = players[i];
+            if (player == null || !player.isActiveAndEnabled) continue;
+            IgnorePlayerCollisions(player);
+            PushOut(player);
         }
+    }
+
+    private void PushOut(PlayerHealth player)
+    {
+        CapsuleCollider playerCollider = player.GetComponentInChildren<CapsuleCollider>();
+        if (playerCollider == null || !playerCollider.enabled) return;
 
         Vector3 bossCenter = bodyCollider.transform.TransformPoint(bodyCollider.center);
         Vector3 playerCenter = playerCollider.transform.TransformPoint(playerCollider.center);
@@ -120,13 +100,14 @@ public class BossPlayerCollisionGuard : MonoBehaviour
         outward.y = 0f;
         outward.Normalize();
 
-        Vector3 position = playerRoot.position;
-        position += outward * (minimumDistance - distance);
+        Transform playerRoot = player.transform;
+        Vector3 position = playerRoot.position + outward * (minimumDistance - distance);
         playerRoot.position = position;
 
-        if (playerBody != null)
+        if (player.TryGetComponent(out Rigidbody playerBody))
         {
             playerBody.position = position;
+            if (playerBody.isKinematic) return;
             Vector3 velocity = playerBody.linearVelocity;
             float inwardSpeed = Vector3.Dot(velocity, outward);
             if (inwardSpeed < 0f)

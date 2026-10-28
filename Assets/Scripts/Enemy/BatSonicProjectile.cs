@@ -1,4 +1,6 @@
+using System.Collections;
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -15,6 +17,8 @@ public sealed class BatSonicProjectile : MonoBehaviour
     private int damage;
     private Mesh waveMesh;
     private bool launched;
+    private bool finished;
+    private NetworkObject networkObject;
 
     private void Awake()
     {
@@ -38,9 +42,31 @@ public sealed class BatSonicProjectile : MonoBehaviour
         direction = travelDirection.normalized;
         damage = attackDamage;
         launched = direction.sqrMagnitude > 0f;
-        Destroy(gameObject, lifetime);
+        networkObject = GetComponent<NetworkObject>();
+        StartCoroutine(FinishAfter(lifetime));
 
         if (launched) CheckInitialOverlap();
+    }
+
+    private IEnumerator FinishAfter(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        Finish();
+    }
+
+    // 네트워크 투사체는 서버가 Despawn, 오프라인은 Destroy. 클라이언트 복제본은 Launch되지 않는다.
+    private void Finish()
+    {
+        if (finished) return;
+        finished = true;
+        launched = false;
+        if (networkObject != null && networkObject.IsSpawned)
+        {
+            if (networkObject.NetworkManager != null && networkObject.NetworkManager.IsServer)
+                networkObject.Despawn(true);
+            return;
+        }
+        Destroy(gameObject);
     }
 
     private void FixedUpdate()
@@ -91,7 +117,7 @@ public sealed class BatSonicProjectile : MonoBehaviour
         launched = false;
         PlayerHealth player = hit.GetComponentInParent<PlayerHealth>();
         if (player != null) player.TakeDamage(damage);
-        Destroy(gameObject);
+        Finish();
     }
 
     private static Mesh BuildWaveMesh()

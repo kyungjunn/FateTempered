@@ -37,6 +37,13 @@ public class BossEnemyAttack : EnemyAttack
     private Material indicatorChargeMaterial;
     private Material indicatorOutlineMaterial;
     private Coroutine indicatorHideRoutine;
+    private EnemyNetworkRole networkRole;
+
+    protected override void Awake()
+    {
+        base.Awake();
+        networkRole = GetComponent<EnemyNetworkRole>();
+    }
 
     public bool IsUsingStrongAttack => useStrongAttack;
     public override bool LockFacingDuringAttack => true;
@@ -85,10 +92,25 @@ public class BossEnemyAttack : EnemyAttack
             nextStrongAttackTime = Time.time + StrongAttackMinInterval;
             strongAttackCenter = transform.position + Vector3.up * indicatorGroundOffset;
             ShowStrongAttackIndicator();
+            networkRole?.SendStrongAttackIndicator(strongAttackCenter, true);
             return;
         }
 
         HideStrongAttackIndicator();
+        networkRole?.SendStrongAttackIndicator(Vector3.zero, false);
+    }
+
+    // 클라이언트: 서버가 보낸 강공격 범위 표시
+    public void ApplyReplicatedIndicator(Vector3 center, bool show)
+    {
+        if (!show)
+        {
+            HideStrongAttackIndicator();
+            return;
+        }
+
+        strongAttackCenter = center;
+        ShowStrongAttackIndicator();
     }
 
     private void QueueAttackIfNeeded()

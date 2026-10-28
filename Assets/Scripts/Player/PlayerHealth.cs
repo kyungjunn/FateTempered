@@ -10,12 +10,16 @@ public class PlayerHealth : LivingEntity
 
     private bool hasReplicatedHealthSnapshot;
     private int replicatedMaxHealth;
+    private float invulnerableUntil = float.NegativeInfinity;
+    private float upperBodyLayerWeight = 1f;
 
     public int MaxHealth => hasReplicatedHealthSnapshot
         ? replicatedMaxHealth
         : stats != null ? Mathf.RoundToInt(stats.HP) : maxHealth;
     public int CurrentHealth { get; private set; }
     public bool IsDead { get; private set; }
+    // 부활 직후 무적. 피해 판정은 서버/오프라인만 하므로 클라이언트에는 복제하지 않는다.
+    public bool IsInvulnerable => Time.time < invulnerableUntil;
     public Action onHealthChanged;
 
     private PlayerStateManager stateManager;
@@ -38,6 +42,10 @@ public class PlayerHealth : LivingEntity
 
         animator = GetComponentInChildren<Animator>();
         rb = GetComponent<Rigidbody>();
+        if (animator != null && animator.layerCount > 1)
+        {
+            upperBodyLayerWeight = animator.GetLayerWeight(1);
+        }
 
         CurrentHealth = MaxHealth;
     }
@@ -62,7 +70,7 @@ public class PlayerHealth : LivingEntity
 
     public override void TakeDamage(int damage)
     {
-        if (!NetworkAuthority.CanSimulate(gameObject) || IsDead || damage <= 0)
+        if (!NetworkAuthority.CanSimulate(gameObject) || IsDead || IsInvulnerable || damage <= 0)
         {
             return;
         }
@@ -109,6 +117,26 @@ public class PlayerHealth : LivingEntity
         {
             ApplyDeathPresentation();
         }
+        else if (wasDead && !IsDead)
+        {
+            ApplyRevivePresentation();
+        }
+    }
+
+    // 쓰러진 자리에서 부활 (서버/오프라인만). 체력은 최대 체력 비율, 최소 1.
+    public bool Revive(float healthRatio, float invulnerableSeconds)
+    {
+        if (!NetworkAuthority.CanSimulate(gameObject) || !IsDead)
+        {
+            return false;
+        }
+
+        IsDead = false;
+        CurrentHealth = Mathf.Clamp(Mathf.RoundToInt(MaxHealth * Mathf.Clamp01(healthRatio)), 1, MaxHealth);
+        invulnerableUntil = Time.time + Mathf.Max(0f, invulnerableSeconds);
+        ApplyRevivePresentation();
+        onHealthChanged?.Invoke();
+        return true;
     }
 
     private int Defense => stats != null ? Mathf.RoundToInt(stats.Defense) : 0;
@@ -175,6 +203,38 @@ public class PlayerHealth : LivingEntity
         if (TryGetComponent(out PlayerMovement movement))
         {
             movement.enabled = false;
+        }
+    }
+
+    private void ApplyRevivePresentation()
+    {
+        stateManager?.Revive();
+
+        if (animator != null)
+        {
+            // Die 상태는 종단 상태라 전이로 빠져나올 수 없다. 기본 상태로 되돌린다.
+            animator.ResetTrigger("Die");
+            animator.Rebind();
+            animator.Update(0f);
+            if (animator.layerCount > 1)
+            {
+                animator.SetLayerWeight(1, upperBodyLayerWeight);
+            }
+        }
+
+        if (!disableControlsOnDeath)
+        {
+            return;
+        }
+
+        if (TryGetComponent(out PlayerController controller))
+        {
+            controller.enabled = true;
+        }
+
+        if (TryGetComponent(out PlayerMovement movement))
+        {
+            movement.enabled = true;
         }
     }
 }

@@ -169,7 +169,7 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        if (NetworkPlayerMotor.CanSimulate(gameObject))
+        if (NetworkAuthority.CanSimulate(gameObject))
         {
             UpdateAttackAnimationSpeed();
             stateManager?.ChangeState(PlayerState.Attack);
@@ -211,7 +211,7 @@ public class PlayerController : MonoBehaviour
 
     private void UpdateAttackAnimationSpeed()
     {
-        if (!NetworkPlayerMotor.CanSimulate(gameObject)) return;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return;
         if (anim == null)
         {
             return;
@@ -260,7 +260,7 @@ public class PlayerController : MonoBehaviour
 
     public void EndAttackState()
     {
-        if (!NetworkPlayerMotor.CanSimulate(gameObject)) return;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return;
         if (skillController != null && skillController.IsUltimateDashing)
             return;
         basicAttackActive = false;

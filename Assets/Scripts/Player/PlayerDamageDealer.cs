@@ -19,8 +19,8 @@ public class PlayerDamageDealer : MonoBehaviour
         if (TryGetComponent(out PlayerSkillController skills) && skills.IsSessionEnded)
             return 0;
 
-        if (!NetworkHealth.CanWrite(gameObject) || enemy == null ||
-            !NetworkHealth.CanWrite(enemy.gameObject) || enemy.IsDead || damage <= 0)
+        if (!NetworkAuthority.CanSimulate(gameObject) || enemy == null ||
+            !NetworkAuthority.CanSimulate(enemy.gameObject) || enemy.IsDead || damage <= 0)
         {
             return 0;
         }

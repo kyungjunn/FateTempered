@@ -93,8 +93,7 @@ public sealed class PlayerNetworkOwnership : NetworkBehaviour
     {
         bool networkSession = NetworkGameSession.IsNetworkSessionActive;
         GameManager gameManager = GameManager.Instance;
-        bool combatReady = !networkSession || (NetworkGameSession.IsCombatRunning &&
-            gameManager != null && gameManager.IsActiveSession && gameManager.IsNetworkCombatActive);
+        bool combatReady = NetworkAuthority.IsCombatReady;
         bool localControl = local && combatReady && !networkDespawned;
         bool serverSimulation = IsSpawned && IsServer && combatReady && !networkDespawned;
 

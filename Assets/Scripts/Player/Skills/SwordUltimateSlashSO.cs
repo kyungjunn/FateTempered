@@ -35,7 +35,7 @@ public sealed class SwordUltimateSlashSO : PlayerSkillSO
 
     public override bool Cast(PlayerSkillController owner, PlayerDamageType damageType)
     {
-        if (owner == null || !NetworkHealth.CanWrite(owner.gameObject) ||
+        if (owner == null || !NetworkAuthority.CanSimulate(owner.gameObject) ||
             !owner.isActiveAndEnabled || owner.IsPlayerDead ||
             owner.Stats == null || owner.DamageDealer == null)
             return false;

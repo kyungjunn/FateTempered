@@ -37,7 +37,7 @@ public sealed class PlayerUltimateGauge : MonoBehaviour
     // 충전
     public void Add(float amount)
     {
-        if (!NetworkHealth.CanWrite(gameObject) || float.IsNaN(amount) || float.IsInfinity(amount))
+        if (!NetworkAuthority.CanSimulate(gameObject) || float.IsNaN(amount) || float.IsInfinity(amount))
             return;
         // Lazy lookup also supports runtime factories that add combat after the gauge.
         if (ninjaUltimate == null)
@@ -55,7 +55,7 @@ public sealed class PlayerUltimateGauge : MonoBehaviour
     // 풀일 때만 소모
     public bool TryConsume()
     {
-        if (!NetworkHealth.CanWrite(gameObject) || !IsFull)
+        if (!NetworkAuthority.CanSimulate(gameObject) || !IsFull)
             return false;
 
         currentGauge = 0f;
@@ -73,14 +73,14 @@ public sealed class PlayerUltimateGauge : MonoBehaviour
     [ContextMenu("Fill Gauge For Test")]
     private void FillForTest()
     {
-        if (!NetworkHealth.CanWrite(gameObject)) return;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return;
         currentGauge = maxGauge;
         Changed?.Invoke(1f);
     }
 
     internal void ApplyNetworkReplica(float current, float maximum)
     {
-        if (NetworkHealth.CanWrite(gameObject)) return;
+        if (NetworkAuthority.CanSimulate(gameObject)) return;
         float nextMax = Mathf.Max(1f, maximum);
         float nextCurrent = Mathf.Clamp(current, 0f, nextMax);
         if (currentGauge == nextCurrent && maxGauge == nextMax) return;

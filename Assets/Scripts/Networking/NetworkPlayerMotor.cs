@@ -38,7 +38,7 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
     {
         networkDespawned = false;
         body.isKinematic = !IsServer ||
-            (NetworkGameSession.IsNetworkSessionActive && !IsProductionCombatReady());
+            (NetworkGameSession.IsNetworkSessionActive && !NetworkAuthority.IsCombatReady);
         yaw = transform.eulerAngles.y;
         ClearInput();
     }
@@ -66,19 +66,12 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
         lastInputTime = float.NegativeInfinity;
     }
 
-    // Offline objects and spawned server objects alone may write root movement/animation.
-    public static bool CanSimulate(GameObject target)
-    {
-        var networkObject = target.GetComponent<NetworkObject>();
-        return networkObject == null || !networkObject.IsSpawned ||
-            (networkObject.NetworkManager != null && networkObject.NetworkManager.IsServer);
-    }
 
     // Owner-facing API: finite direction is clamped to unit length, yaw normalized to degrees.
     // No position, velocity, speed, delta time, or grounded claim is accepted from the owner.
     public void SubmitInput(Vector2 move, float yawDegrees, bool jump)
     {
-        if (networkDespawned || !IsSpawned || !IsOwner || !IsProductionCombatReady()) return;
+        if (networkDespawned || !IsSpawned || !IsOwner || !NetworkAuthority.IsCombatReady) return;
         if (IsServer) AcceptInput(move, yawDegrees, jump);
         else SubmitInputRpc(move, yawDegrees, jump);
     }
@@ -91,7 +84,7 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
 
     private void AcceptInput(Vector2 move, float yawDegrees, bool jump)
     {
-        if (networkDespawned || !IsProductionCombatReady() || (skills != null && skills.IsSessionEnded))
+        if (networkDespawned || !NetworkAuthority.IsCombatReady || (skills != null && skills.IsSessionEnded))
         {
             ClearInput();
             return;
@@ -109,20 +102,11 @@ public sealed class NetworkPlayerMotor : NetworkBehaviour
 
     private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
-    private static bool IsProductionCombatReady()
-    {
-        if (!NetworkGameSession.IsNetworkSessionActive)
-            return true;
-
-        GameManager gameManager = GameManager.Instance;
-        return NetworkGameSession.IsCombatRunning && gameManager != null &&
-            gameManager.IsActiveSession && gameManager.IsNetworkCombatActive;
-    }
 
     private void FixedUpdate()
     {
         if (networkDespawned || !IsSpawned || !IsServer) return;
-        if (!IsProductionCombatReady())
+        if (!NetworkAuthority.IsCombatReady)
         {
             ClearInput();
             if (body != null) body.isKinematic = true;

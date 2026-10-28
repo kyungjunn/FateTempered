@@ -39,7 +39,7 @@ public class PlayerMovement : MonoBehaviour
 
     public void Move(Vector2 input)
     {
-        if (!NetworkPlayerMotor.CanSimulate(gameObject)) return;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return;
         // 카메라 기준 방향
         Vector3 forward = cameraTransform.forward;
         Vector3 right = cameraTransform.right;
@@ -63,7 +63,7 @@ public class PlayerMovement : MonoBehaviour
     // Network simulation uses server stats and server time, never a client camera transform.
     public void MoveAuthoritative(Vector2 input, float yaw, float deltaTime)
     {
-        if (!NetworkPlayerMotor.CanSimulate(gameObject)) return;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return;
         Vector3 direction = Quaternion.Euler(0f, yaw, 0f) *
             new Vector3(input.x, 0f, input.y);
         rb.MovePosition(rb.position + direction.normalized * MoveSpeed * deltaTime);
@@ -71,7 +71,7 @@ public class PlayerMovement : MonoBehaviour
 
     public bool Jump()
     {
-        if (!NetworkPlayerMotor.CanSimulate(gameObject)) return false;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return false;
         if (CheckGrounded()) 
         {
             rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);

@@ -69,21 +69,6 @@ public sealed class NetworkHealth : NetworkBehaviour
         UnbindHealth();
     }
 
-    public static bool CanWrite(GameObject target)
-    {
-        if (target == null)
-        {
-            return false;
-        }
-
-        NetworkObject networkObject = target.GetComponent<NetworkObject>();
-        if (networkObject == null || !networkObject.IsSpawned)
-        {
-            return true;
-        }
-
-        return networkObject.NetworkManager != null && networkObject.NetworkManager.IsServer;
-    }
 
     private void BindHealthOnSpawn()
     {

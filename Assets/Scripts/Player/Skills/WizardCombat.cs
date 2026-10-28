@@ -122,7 +122,7 @@ public sealed class WizardCombat : MonoBehaviour
     {
         get
         {
-            if (!NetworkHealth.CanWrite(gameObject) || overdrive == null || overdrive.Cancelled || IsOwnerDead())
+            if (!NetworkAuthority.CanSimulate(gameObject) || overdrive == null || overdrive.Cancelled || IsOwnerDead())
                 return false;
 
             RefreshOverchargeExtension(overdrive);
@@ -190,7 +190,7 @@ public sealed class WizardCombat : MonoBehaviour
         if (IsGamePaused)
             return;
 
-        if (!NetworkHealth.CanWrite(gameObject))
+        if (!NetworkAuthority.CanSimulate(gameObject))
             return;
 
         RefreshOverchargeExtension(overdrive);
@@ -201,7 +201,7 @@ public sealed class WizardCombat : MonoBehaviour
 
     public bool TryCast(WizardSkillSO skill)
     {
-        if (!NetworkHealth.CanWrite(gameObject) ||
+        if (!NetworkAuthority.CanSimulate(gameObject) ||
             !isActiveAndEnabled || !gameObject.activeInHierarchy || skill == null ||
             owner == null || damageDealer == null || IsOwnerDead() || IsGamePaused)
         {
@@ -1161,7 +1161,7 @@ public sealed class WizardCombat : MonoBehaviour
 
     private bool CanRunEffects()
     {
-        return NetworkHealth.CanWrite(gameObject) &&
+        return NetworkAuthority.CanSimulate(gameObject) &&
                isActiveAndEnabled && owner != null && damageDealer != null && !IsOwnerDead();
     }
 
@@ -1379,7 +1379,7 @@ public sealed class WizardCombat : MonoBehaviour
 
     private void RefreshOverchargeExtension(Overdrive state)
     {
-        if (!NetworkHealth.CanWrite(gameObject) ||
+        if (!NetworkAuthority.CanSimulate(gameObject) ||
             state == null || state.Cancelled || state.FinalBlastTriggered)
             return;
 

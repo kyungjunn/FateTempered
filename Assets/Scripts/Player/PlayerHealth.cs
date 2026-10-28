@@ -60,7 +60,7 @@ public class PlayerHealth : LivingEntity
 
     public override void TakeDamage(int damage)
     {
-        if (!NetworkHealth.CanWrite(gameObject) || IsDead || damage <= 0)
+        if (!NetworkAuthority.CanSimulate(gameObject) || IsDead || damage <= 0)
         {
             return;
         }
@@ -78,7 +78,7 @@ public class PlayerHealth : LivingEntity
 
     public int Heal(int amount)
     {
-        if (!NetworkHealth.CanWrite(gameObject) || IsDead || amount <= 0 || CurrentHealth >= MaxHealth)
+        if (!NetworkAuthority.CanSimulate(gameObject) || IsDead || amount <= 0 || CurrentHealth >= MaxHealth)
         {
             return 0;
         }
@@ -91,7 +91,7 @@ public class PlayerHealth : LivingEntity
 
     public void ApplyReplicatedHealth(int currentHealth, int maxHealth)
     {
-        if (NetworkHealth.CanWrite(gameObject))
+        if (NetworkAuthority.CanSimulate(gameObject))
         {
             return;
         }
@@ -113,7 +113,7 @@ public class PlayerHealth : LivingEntity
 
     private void HandleStatsChanged()
     {
-        if (!NetworkHealth.CanWrite(gameObject))
+        if (!NetworkAuthority.CanSimulate(gameObject))
         {
             return;
         }

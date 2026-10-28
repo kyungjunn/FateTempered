@@ -19,7 +19,7 @@ public sealed class ProjectileSkillSO : PlayerSkillSO
     public override bool Cast(PlayerSkillController owner, PlayerDamageType damageType)
     {
         if (owner == null || projectilePrefab == null || owner.SkillOrigin == null || owner.DamageDealer == null ||
-            !NetworkHealth.CanWrite(owner.gameObject))
+            !NetworkAuthority.CanSimulate(owner.gameObject))
             return false;
 
         DamageProjectile projectile = Instantiate(

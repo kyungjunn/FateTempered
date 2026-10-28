@@ -33,7 +33,7 @@ public sealed class NetworkPlayerCombat : NetworkBehaviour
             return false;
         }
 
-        if (!combat.IsProductionCombatReady())
+        if (!NetworkAuthority.IsCombatReady)
             return true;
 
         if (combat.IsServer)
@@ -63,10 +63,10 @@ public sealed class NetworkPlayerCombat : NetworkBehaviour
         if (playerHealth == null) playerHealth = GetComponent<PlayerHealth>();
         var skills = GetComponent<NetworkPlayerSkills>();
         var skillController = GetComponent<PlayerSkillController>();
-        if (!IsProductionCombatReady() || (skills != null && skills.BlocksBasicAttack) ||
+        if (!NetworkAuthority.IsCombatReady || (skills != null && skills.BlocksBasicAttack) ||
             (skillController != null && skillController.IsSessionEnded)) return;
         if (float.IsNaN(aimPitch) || float.IsInfinity(aimPitch) ||
-            !IsSpawned || !IsServer || !NetworkHealth.CanWrite(gameObject) ||
+            !IsSpawned || !IsServer || !NetworkAuthority.CanSimulate(gameObject) ||
             playerHealth == null || playerHealth.IsDead || playerHealth.CurrentHealth <= 0 ||
             (stateManager != null && stateManager.CurrentState == PlayerState.Dead) ||
             basicAttack == null || executingAuthoritativeAttack)
@@ -106,20 +106,11 @@ public sealed class NetworkPlayerCombat : NetworkBehaviour
         ExecuteAuthoritativeAttack(aimPitch);
     }
 
-    private bool IsProductionCombatReady()
-    {
-        if (!NetworkGameSession.IsNetworkSessionActive)
-            return true;
-
-        GameManager gameManager = GameManager.Instance;
-        return NetworkGameSession.IsCombatRunning && gameManager != null &&
-            gameManager.IsActiveSession && gameManager.IsNetworkCombatActive;
-    }
 
     public void PresentMeleeHit(Vector3 contactPoint)
     {
         PlayerSkillController skillController = GetComponent<PlayerSkillController>();
-        if (IsServer && IsSpawned && IsProductionCombatReady() &&
+        if (IsServer && IsSpawned && NetworkAuthority.IsCombatReady &&
             (skillController == null || !skillController.IsSessionEnded))
             MeleeHitRpc(contactPoint);
     }
@@ -129,7 +120,7 @@ public sealed class NetworkPlayerCombat : NetworkBehaviour
     {
         // Never slow the server or client simulation for a cosmetic impact.
         PlayerSkillController skillController = GetComponent<PlayerSkillController>();
-        if (IsProductionCombatReady() && (skillController == null || !skillController.IsSessionEnded))
+        if (NetworkAuthority.IsCombatReady && (skillController == null || !skillController.IsSessionEnded))
             GetComponent<SwordCombatFeedback>()?.PlayMeleeImpact(contactPoint, false);
     }
 
@@ -137,7 +128,7 @@ public sealed class NetworkPlayerCombat : NetworkBehaviour
     private void AcceptedBasicAttackRpc()
     {
         PlayerSkillController skillController = GetComponent<PlayerSkillController>();
-        if (!IsProductionCombatReady() || (skillController != null && skillController.IsSessionEnded))
+        if (!NetworkAuthority.IsCombatReady || (skillController != null && skillController.IsSessionEnded))
             return;
 
         PlayerController controller = GetComponent<PlayerController>();

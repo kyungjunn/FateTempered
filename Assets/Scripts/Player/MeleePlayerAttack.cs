@@ -100,7 +100,7 @@ public class MeleePlayerAttack : MonoBehaviour, IPlayerBasicAttack
     // The replicated path reproduces the blade trail timing but never performs a hit query or damage.
     public void PlayAcceptedAttackVisual()
     {
-        if (!isActiveAndEnabled || NetworkHealth.CanWrite(gameObject))
+        if (!isActiveAndEnabled || NetworkAuthority.CanSimulate(gameObject))
         {
             return;
         }
@@ -179,7 +179,7 @@ public class MeleePlayerAttack : MonoBehaviour, IPlayerBasicAttack
 
     private void ApplyDamage()
     {
-        if (!NetworkHealth.CanWrite(gameObject)) return;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return;
 
         NetworkPlayerCombat networkCombat = GetComponent<NetworkPlayerCombat>();
         int damage = Mathf.Max(1, Mathf.RoundToInt(AttackDamage * areaDamageMultiplier));

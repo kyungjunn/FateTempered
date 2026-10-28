@@ -19,7 +19,7 @@ public sealed class NinjaHwaDunSkillSO : PlayerSkillSO
     {
         // 필수 참조 및 기존 화둔 채널 중복 검사.
         if (flamethrowerPrefab == null || owner == null || owner.SkillOrigin == null ||
-            owner.DamageDealer == null || !NetworkHealth.CanWrite(owner.gameObject))
+            owner.DamageDealer == null || !NetworkAuthority.CanSimulate(owner.gameObject))
             return false;
 
         if (owner.GetComponentInChildren<NinjaHwaDunChannel>(true) != null)

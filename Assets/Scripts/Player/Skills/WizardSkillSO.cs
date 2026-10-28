@@ -75,7 +75,7 @@ public sealed class WizardSkillSO : PlayerSkillSO
 
     public override bool Cast(PlayerSkillController owner, PlayerDamageType damageType)
     {
-        if (owner == null || !NetworkHealth.CanWrite(owner.gameObject) || owner.DamageDealer == null)
+        if (owner == null || !NetworkAuthority.CanSimulate(owner.gameObject) || owner.DamageDealer == null)
             return false;
 
         WizardCombat combat = owner.GetComponent<WizardCombat>();

@@ -35,7 +35,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
 
     public void RecordDamageSource(PlayerDamageDealer source)
     {
-        if (NetworkHealth.CanWrite(gameObject)) lastDamageSource = source;
+        if (NetworkAuthority.CanSimulate(gameObject)) lastDamageSource = source;
     }
 
     private void Awake()
@@ -54,7 +54,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
     // 플레이어 공격 등 외부 피해를 받을 때 호출
     public void TakeDamage(int damage)
     {
-        if (!NetworkHealth.CanWrite(gameObject) || IsDead || damage <= 0)
+        if (!NetworkAuthority.CanSimulate(gameObject) || IsDead || damage <= 0)
         {
             return;
         }
@@ -79,7 +79,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
 
     public void ApplyReplicatedHealth(int currentHealth, int maxHealth)
     {
-        if (NetworkHealth.CanWrite(gameObject))
+        if (NetworkAuthority.CanSimulate(gameObject))
         {
             return;
         }

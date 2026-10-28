@@ -16,7 +16,7 @@ public sealed class NinjaDashSkillSO : PlayerSkillSO
     {
         // 피해 계산에 필요한 참조 확인 후 돌진 코루틴 시작.
         if (owner == null || owner.DamageDealer == null || owner.Stats == null || owner.IsPlayerDead ||
-            !NetworkHealth.CanWrite(owner.gameObject))
+            !NetworkAuthority.CanSimulate(owner.gameObject))
             return false;
 
         PlayerAugments playerAugments = owner.GetComponent<PlayerAugments>();

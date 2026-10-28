@@ -249,7 +249,7 @@ public sealed class PlayerSkillController : MonoBehaviour
 
     internal bool TryCastLocalSkill(NetworkSkillSlot slot)
     {
-        if (NetworkSkills != null || !NetworkHealth.CanWrite(gameObject) || !CanCast() || IsSkillCasting())
+        if (NetworkSkills != null || !NetworkAuthority.CanSimulate(gameObject) || !CanCast() || IsSkillCasting())
             return false;
 
         switch (slot)
@@ -267,7 +267,7 @@ public sealed class PlayerSkillController : MonoBehaviour
 
     private bool TryUseUltimateAuthoritative()
     {
-        if (!NetworkHealth.CanWrite(gameObject)) return false;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return false;
         // 일시정지·사망·다른 스킬 시전 중이면 사용 차단.
         if (!CanCast() || IsSkillCasting())
             return false;
@@ -301,7 +301,7 @@ public sealed class PlayerSkillController : MonoBehaviour
     // 쿨다운 확인 후 시전
     private bool TryCast(PlayerSkillSO skill, bool isE)
     {
-        if (!NetworkHealth.CanWrite(gameObject)) return false;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return false;
         // 시전 가능 상태, Q 쿨타임 또는 E 충전 수, 스킬 실행 결과 검사.
         if (!CanCast() || IsSkillCasting() || skill == null ||
             (isE ? ECharges <= 0 : Time.time < qReadyTime) ||
@@ -510,7 +510,7 @@ public sealed class PlayerSkillController : MonoBehaviour
 
     private void RefreshEChargeState()
     {
-        if (!NetworkHealth.CanWrite(gameObject)) return;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return;
         if (playerAugments == null)
             playerAugments = GetComponent<PlayerAugments>();
 

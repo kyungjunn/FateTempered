@@ -177,7 +177,7 @@ public class GameManager : MonoBehaviour
         PlayerController controller = player.GetComponent<PlayerController>();
         if (controller != null) controller.enabled = false;
 
-        if (NetworkPlayerMotor.CanSimulate(player) && player.TryGetComponent(out Rigidbody body))
+        if (NetworkAuthority.CanSimulate(player) && player.TryGetComponent(out Rigidbody body))
             body.linearVelocity = Vector3.zero;
     }
 

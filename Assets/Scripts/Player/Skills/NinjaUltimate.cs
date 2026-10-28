@@ -62,7 +62,7 @@ public sealed class NinjaUltimate : MonoBehaviour
 
     private void Update()
     {
-        if (!NetworkHealth.CanWrite(gameObject)) return;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return;
         // 사망 시 정리, 준비 시간이 끝나면 버프 해제.
         if (IsPlayerDead())
         {
@@ -93,7 +93,7 @@ public sealed class NinjaUltimate : MonoBehaviour
 
     public bool TryActivate()
     {
-        if (!NetworkHealth.CanWrite(gameObject)) return false;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return false;
         // 참조/상태 확인 후 손 이펙트 생성.
         CacheComponents();
 
@@ -138,7 +138,7 @@ public sealed class NinjaUltimate : MonoBehaviour
 
     public bool TryRecast()
     {
-        if (!NetworkHealth.CanWrite(gameObject)) return false;
+        if (!NetworkAuthority.CanSimulate(gameObject)) return false;
         // 준비 상태·조작 가능 여부를 확인한 뒤 재시전.
         CacheComponents();
 

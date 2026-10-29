@@ -11,6 +11,8 @@
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 *.log
+# Local notes, not published
+/docs/
 
 # Blender source files stay local. Unity imports the FBX/clip instead.
 *.blend

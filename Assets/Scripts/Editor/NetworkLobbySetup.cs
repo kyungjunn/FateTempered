@@ -12,16 +12,19 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-// Creates only the new networking scenes; never rewrites combat prefabs or offline scenes.
+// 에디터 도구: 네트워크 진입·로비 씬 생성; 전투 프리팹·오프라인 씬 제외
 public static class NetworkLobbySetup
 {
+    // 생성 대상 씬 경로
     public const string EntryPath = "Assets/Scenes/NetworkEntry.unity";
     public const string LobbyPath = "Assets/Scenes/TeamLobby.unity";
+    // 공용 UI 색상·한글 폰트
     private static readonly Color Background = new Color(0.035f, 0.055f, 0.09f, 1f);
     private static readonly Color Surface = new Color(0.075f, 0.11f, 0.16f, 1f);
     private static readonly Color Accent = new Color(0.08f, 0.42f, 0.49f, 1f);
     private static TMP_FontAsset font;
 
+    // 누락 씬 생성·빌드 목록 활성화·기존 씬 배치 복원
     [MenuItem("Tools/Networking/Create LAN Lobby Scenes")]
     public static void CreateScenes()
     {
@@ -47,6 +50,7 @@ public static class NetworkLobbySetup
         finally { EditorSceneManager.RestoreSceneManagerSetup(setup); }
     }
 
+    // 빌드 씬 중복 방지·기존 항목 활성화
     private static void AddScene(List<EditorBuildSettingsScene> scenes, string path)
     {
         int index = scenes.FindIndex(scene => scene.path == path);
@@ -54,6 +58,7 @@ public static class NetworkLobbySetup
         else scenes[index] = new EditorBuildSettingsScene(path, true);
     }
 
+    // 진입 씬: 네트워크 세션·방 탐색·프로필·생성·퇴장 UI
     private static void CreateEntry()
     {
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -65,6 +70,7 @@ public static class NetworkLobbySetup
         manager.NetworkConfig.ConnectionApproval = true;
         manager.NetworkConfig.TickRate = 30;
         manager.NetworkConfig.LoadSceneTimeOut = 60;
+        // 기본 플레이어 자동 생성 없음; 세션에서 캐릭터별 스폰 관리
         manager.NetworkConfig.PlayerPrefab = null;
         var registry = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>(NetworkCombatSetup.RegistryPath);
         if (registry == null) throw new InvalidOperationException("Shared registered combat prefabs are missing.");
@@ -75,6 +81,7 @@ public static class NetworkLobbySetup
         var sessionData = new SerializedObject(session);
         var players = sessionData.FindProperty("playerPrefabs");
         players.arraySize = 3;
+        // PlayerCharacterId 순서와 프리팹 인덱스 일치
         string[] names = { "SwordPlayer", "NinjaPlayer", "WizardPlayer" };
         for (int i = 0; i < names.Length; i++)
         {
@@ -160,6 +167,7 @@ public static class NetworkLobbySetup
         EditorSceneManager.SaveScene(scene, EntryPath);
     }
 
+    // 기존 로비 레이아웃 재생성; 실행 중·미저장 씬 보호
     [MenuItem("Tools/Networking/Rebuild Team Lobby Layout")]
     public static void RebuildLobby()
     {
@@ -175,6 +183,7 @@ public static class NetworkLobbySetup
         Debug.Log("TEAM_LOBBY_LAYOUT_REBUILT");
     }
 
+    // 비율 유지 초상화; 이미지 없으면 숨김
     private static Image Portrait(Transform parent, string name, Sprite sprite, float x, float y, float size)
     {
         var rect = Box(parent, name, x, y, size, size, Color.white);
@@ -186,6 +195,7 @@ public static class NetworkLobbySetup
         return image;
     }
 
+    // 로비 씬: 복제 상태 오브젝트·2인 정보·챔피언 선택·준비 UI
     private static void CreateLobby()
     {
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -234,6 +244,7 @@ public static class NetworkLobbySetup
         loading.gameObject.SetActive(false);
         fields.ApplyModifiedPropertiesWithoutUndo();
         EditorSceneManager.SaveScene(scene, LobbyPath);
+        // 저장된 씬 기준 NGO 오브젝트 식별자 재검증
         var validate = typeof(NetworkObject).GetMethod("OnValidate",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         if (validate == null) throw new InvalidOperationException("NGO scene identity validation is unavailable.");
@@ -241,6 +252,7 @@ public static class NetworkLobbySetup
         EditorSceneManager.SaveScene(scene, LobbyPath);
     }
 
+    // 오버레이 캔버스·1280×720 기준 화면 비례 배치
     private static RectTransform Canvas(string name, int order)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -254,6 +266,7 @@ public static class NetworkLobbySetup
         return (RectTransform)go.transform;
     }
 
+    // 부모 전체 영역 패널
     private static RectTransform Panel(Transform parent, string name, Color color)
     {
         var rect = Box(parent, name, 0, 0, 1280, 720, color);
@@ -264,6 +277,7 @@ public static class NetworkLobbySetup
         return rect;
     }
 
+    // 배경 이미지·사각 영역 생성
     private static RectTransform Box(Transform parent, string name, float x, float y, float width, float height, Color color)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image));
@@ -274,6 +288,7 @@ public static class NetworkLobbySetup
         return rect;
     }
 
+    // 공용 텍스트: 한글 폰트·리치 텍스트 차단·말줄임
     private static TMP_Text Label(Transform parent, string name, string value, float x, float y, float width, float height, float size = 24)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
@@ -292,6 +307,7 @@ public static class NetworkLobbySetup
         return text;
     }
 
+    // 강조색 버튼·중앙 정렬 레이블
     private static Button Button(Transform parent, string name, string caption, float x, float y, float width, float height)
     {
         var rect = Box(parent, name, x, y, width, height, Accent);
@@ -302,6 +318,7 @@ public static class NetworkLobbySetup
         return button;
     }
 
+    // 단일 행 입력창·마스킹 영역·안내 문구
     private static TMP_InputField Input(Transform parent, string name, string hint, float x, float y, float width, float height)
     {
         var rect = Box(parent, name, x, y, width, height, Surface);
@@ -320,6 +337,7 @@ public static class NetworkLobbySetup
         return input;
     }
 
+    // 세로 스크롤·항목 높이 기반 콘텐츠 확장
     private static RectTransform Scroll(Transform parent, string name, float x, float y, float width, float height)
     {
         var root = Box(parent, name, x, y, width, height, Surface);
@@ -344,6 +362,7 @@ public static class NetworkLobbySetup
         return content;
     }
 
+    // 좌상단 기준 좌표·크기 설정
     private static void Place(RectTransform rect, float x, float y, float width, float height)
     {
         rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
@@ -351,6 +370,7 @@ public static class NetworkLobbySetup
         rect.sizeDelta = new Vector2(width, height);
     }
 
+    // 직렬화 필드 존재 검사·씬 오브젝트 참조 연결
     private static void Bind(SerializedObject target, string field, Object value)
     {
         var property = target.FindProperty(field);

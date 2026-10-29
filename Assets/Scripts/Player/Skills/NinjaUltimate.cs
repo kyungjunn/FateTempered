@@ -62,6 +62,7 @@ public sealed class NinjaUltimate : MonoBehaviour
 
     private void Update()
     {
+        // 서버·오프라인만 궁극기 상태 갱신.
         if (!NetworkAuthority.CanSimulate(gameObject)) return;
         // 사망 시 정리, 준비 시간이 끝나면 버프 해제.
         if (IsPlayerDead())

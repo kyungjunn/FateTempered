@@ -96,10 +96,11 @@ public class MeleePlayerAttack : MonoBehaviour, IPlayerBasicAttack
         return true;
     }
 
-    // Called only by the accepted-attack RPC on non-server replicas.
-    // The replicated path reproduces the blade trail timing but never performs a hit query or damage.
+    // 승인된 공격 RPC의 비서버 복제본 전용.
+    // 칼날 궤적 타이밍만 재현, 명중 검사·피해 없음.
     public void PlayAcceptedAttackVisual()
     {
+        // 서버·오프라인은 실제 공격 경로 사용.
         if (!isActiveAndEnabled || NetworkAuthority.CanSimulate(gameObject))
         {
             return;
@@ -179,6 +180,7 @@ public class MeleePlayerAttack : MonoBehaviour, IPlayerBasicAttack
 
     private void ApplyDamage()
     {
+        // 서버·오프라인만 근접 피해 확정.
         if (!NetworkAuthority.CanSimulate(gameObject)) return;
 
         NetworkPlayerCombat networkCombat = GetComponent<NetworkPlayerCombat>();

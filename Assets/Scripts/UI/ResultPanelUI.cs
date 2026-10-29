@@ -20,6 +20,7 @@ public sealed class ResultPanelUI : MonoBehaviour
     [SerializeField] private Button restartOfflineButton;
     [SerializeField] private Button returnOfflineToMenuButton;
 
+    // 결과 상태·로비 복귀 권한 조회 대상
     private NetworkGameSession session;
     private bool resultVisible;
 
@@ -45,7 +46,7 @@ public sealed class ResultPanelUI : MonoBehaviour
 
     private void Update()
     {
-        // The persistent canvas can enable before the session singleton is created.
+        // 영속 캔버스 선활성화 대비·세션 생성 후 연결
         EnsureSessionBinding();
     }
 
@@ -65,6 +66,7 @@ public sealed class ResultPanelUI : MonoBehaviour
         RemoveListener(returnOfflineToMenuButton, HandleReturnOfflineToMenu);
     }
 
+    // 세션 교체 감지·상태 변경 구독 갱신
     private void EnsureSessionBinding()
     {
         NetworkGameSession currentSession = NetworkGameSession.Instance;
@@ -78,6 +80,7 @@ public sealed class ResultPanelUI : MonoBehaviour
         Render();
     }
 
+    // 이전 네트워크 세션 구독 해제
     private void UnbindSession()
     {
         if (!ReferenceEquals(session, null))
@@ -90,6 +93,7 @@ public sealed class ResultPanelUI : MonoBehaviour
         Render();
     }
 
+    // 연결된 세션의 결과·복귀 상태 반영
     private void HandleSessionChanged(NetworkGameSession changedSession)
     {
         if (changedSession == session)
@@ -100,6 +104,7 @@ public sealed class ResultPanelUI : MonoBehaviour
     {
         MatchResult? result = GameResult.Data;
         bool networkMatch = IsNetworkMatch();
+        // 네트워크 종료 상태 우선·결과 미수신 대기 화면 허용
         bool networkEnded = networkMatch && session != null && session.State == NetworkGameSessionState.Ended;
         bool visible = networkMatch ? networkEnded : result.HasValue;
         SetResultPanelActive(visible);
@@ -133,6 +138,7 @@ public sealed class ResultPanelUI : MonoBehaviour
 
         if (networkMatch)
         {
+            // 방장 전용 로비 복귀·전원 공통 나가기·오프라인 버튼 제외
             bool isHost = session != null && session.IsHost;
             bool canReturn = hasResult && isHost && session.CanReturnToLobby;
             SetActions(isHost, true, false, false);
@@ -158,6 +164,7 @@ public sealed class ResultPanelUI : MonoBehaviour
         }
     }
 
+    // 로비·전투·종료 전환 구간의 네트워크 결과 분기 유지
     private bool IsNetworkMatch()
     {
         if (NetworkGameSession.IsNetworkSessionActive)
@@ -196,6 +203,7 @@ public sealed class ResultPanelUI : MonoBehaviour
             if (count > 1)
                 second = players[1];
 
+            // 로컬 참가자 결과의 첫 번째 열 우선 배치
             if (count > 1 && TryGetLocalClientId(out ulong localClientId) &&
                 second.ClientId == localClientId && first.ClientId != localClientId)
             {
@@ -219,6 +227,7 @@ public sealed class ResultPanelUI : MonoBehaviour
         }
     }
 
+    // 결과 열 정렬용 로컬 네트워크 참가자 ID
     private bool TryGetLocalClientId(out ulong clientId)
     {
         NetworkManager manager = session != null ? session.NetworkManager : NetworkManager.Singleton;
@@ -249,12 +258,14 @@ public sealed class ResultPanelUI : MonoBehaviour
         SetButtonVisible(returnOfflineToMenuButton, showReturnOfflineToMenu);
     }
 
+    // 세션 복귀 가능 조건 확인·로비 복귀 요청
     private void HandleReturnToLobby()
     {
         if (session != null && session.CanReturnToLobby)
             session.ReturnToLobby();
     }
 
+    // 네트워크 세션 이탈 요청
     private void HandleLeaveNetwork()
     {
         if (session != null)

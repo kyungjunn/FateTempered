@@ -8,6 +8,7 @@ public class PlayerHealth : LivingEntity, MatchFlow.IMember
     [SerializeField] private int maxHealth = 100;
     [SerializeField] private bool disableControlsOnDeath;
 
+    // 복제본 최대 체력: 로컬 능력치 대신 서버 스냅샷 우선
     private bool hasReplicatedHealthSnapshot;
     private int replicatedMaxHealth;
     private float invulnerableUntil = float.NegativeInfinity;
@@ -68,6 +69,7 @@ public class PlayerHealth : LivingEntity, MatchFlow.IMember
         }
     }
 
+    // 서버·오프라인 전용 피해 확정 및 사망 판정
     public override void TakeDamage(int damage)
     {
         if (!NetworkAuthority.CanSimulate(gameObject) || IsDead || IsInvulnerable || damage <= 0)
@@ -86,6 +88,7 @@ public class PlayerHealth : LivingEntity, MatchFlow.IMember
         }
     }
 
+    // 서버·오프라인 전용 회복량 확정
     public int Heal(int amount)
     {
         if (!NetworkAuthority.CanSimulate(gameObject) || IsDead || amount <= 0 || CurrentHealth >= MaxHealth)
@@ -99,6 +102,7 @@ public class PlayerHealth : LivingEntity, MatchFlow.IMember
         return CurrentHealth - previousHealth;
     }
 
+    // 클라이언트 복제본 체력 적용 및 사망·부활 연출 전환
     public void ApplyReplicatedHealth(int currentHealth, int maxHealth)
     {
         if (NetworkAuthority.CanSimulate(gameObject))
@@ -141,6 +145,7 @@ public class PlayerHealth : LivingEntity, MatchFlow.IMember
 
     private int Defense => stats != null ? Mathf.RoundToInt(stats.Defense) : 0;
 
+    // 서버·오프라인 능력치 변경에 따른 체력 보정
     private void HandleStatsChanged()
     {
         if (!NetworkAuthority.CanSimulate(gameObject))
@@ -171,6 +176,7 @@ public class PlayerHealth : LivingEntity, MatchFlow.IMember
         ApplyDeathPresentation();
     }
 
+    // 권한 객체·복제본 공통 사망 연출 및 조작 차단
     private void ApplyDeathPresentation()
     {
         stateManager?.ChangeState(PlayerState.Dead);
@@ -206,6 +212,7 @@ public class PlayerHealth : LivingEntity, MatchFlow.IMember
         }
     }
 
+    // 권한 객체·복제본 공통 부활 연출 및 조작 복원
     private void ApplyRevivePresentation()
     {
         stateManager?.Revive();

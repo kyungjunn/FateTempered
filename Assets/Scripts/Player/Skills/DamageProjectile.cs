@@ -1,4 +1,4 @@
-// Shared flight with piercing direct hits or a one-shot area explosion.
+// 관통 직격·단발 범위 폭발 공통 투사체
 using System;
 using System.Collections.Generic;
 using Unity.Netcode;
@@ -15,6 +15,7 @@ public sealed class DamageProjectile : MonoBehaviour
 
     private PlayerDamageDealer damageDealer;
     private PlayerSkillController skillOwner;
+    // 서버 스폰 수명·클라이언트 시각 효과 복제 연결
     private NetworkObject networkObject;
     private NetworkProjectile networkProjectile;
     private PlayerDamageType damageType;
@@ -46,6 +47,7 @@ public sealed class DamageProjectile : MonoBehaviour
         NetworkObject projectileNetworkObject = null;
         NetworkProjectile projectileNetwork = null;
 
+        // 네트워크 발사자의 서버 권한·동일 매니저·서버 권한 프리팹 검증
         if (networkedShot)
         {
             if (networkManager == null || !networkManager.IsListening || !networkManager.IsServer)
@@ -87,7 +89,7 @@ public sealed class DamageProjectile : MonoBehaviour
         wizardProjectileVisual = GetComponent<WizardProjectileVisual>();
         if (networkedShot)
             wizardProjectileVisual?.Configure(empoweredWizardAttack);
-        // Scale the artwork, not the flight collider: a large R must not hit early.
+        // 대형 궁극기 조기 적중 방지용 시각 요소 전용 크기 조정
         ApplyVisualScale(visualScale);
         if (explosionRadius > 0f || !Mathf.Approximately(visualScale, 1f))
         {
@@ -101,6 +103,7 @@ public sealed class DamageProjectile : MonoBehaviour
         body.isKinematic = true;
         body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
+        // 복제 초기값 준비 후 서버 스폰, 실패 시 투사체 폐기
         if (networkedShot)
         {
             try
@@ -128,9 +131,10 @@ public sealed class DamageProjectile : MonoBehaviour
         }
     }
 
+    // 세션 종료 시 서버 투사체 제거·클라이언트 디스폰 전파
     private void CancelEndedSession()
     {
-        // Session cancellation never uses Finish: an explosive projectile must not detonate.
+        // 종료 시 폭발 피해 방지용 Finish 경로 제외
         if (skillOwner == null || !skillOwner.IsSessionEnded || !HasServerSimulationAuthority())
             return;
 
@@ -150,6 +154,7 @@ public sealed class DamageProjectile : MonoBehaviour
     // 이동 / 사거리 종료
     private void FixedUpdate()
     {
+        // 클라이언트 복제본의 독립 이동·종료 판정 차단
         if (!initialized || !HasServerSimulationAuthority())
             return;
 
@@ -167,6 +172,7 @@ public sealed class DamageProjectile : MonoBehaviour
     // 적 적중
     private void OnTriggerEnter(Collider other)
     {
+        // 서버 시뮬레이션 전용 적중·피해 판정
         if (!initialized || !HasServerSimulationAuthority() || damageDealer == null ||
             other.transform.root == damageDealer.transform)
             return;
@@ -189,6 +195,7 @@ public sealed class DamageProjectile : MonoBehaviour
         Finish(enemy, other.ClosestPoint(transform.position));
     }
 
+    // 서버 피해 확정·종료 연출 전파·네트워크 디스폰
     private void Finish(EnemyHealth directTarget, Vector3 hitPosition)
     {
         if (!initialized)
@@ -233,6 +240,7 @@ public sealed class DamageProjectile : MonoBehaviour
         }
     }
 
+    // 클라이언트 복제본 시각 초기화·물리 충돌과 피해 판정 비활성화
     internal void InitializeNetworkReplica(float replicatedVisualScale, bool hasWizardVisual,
         bool empoweredWizardAttack, bool hasExplosion)
     {
@@ -262,6 +270,7 @@ public sealed class DamageProjectile : MonoBehaviour
             hitbox.enabled = false;
     }
 
+    // 서버 통지에 따른 클라이언트 적중·종료·폭발 연출
     internal void PlayNetworkVisual(Vector3 hitPosition, bool hasHit, bool projectileFinishes, bool explodes)
     {
         if (hasHit)
@@ -279,7 +288,7 @@ public sealed class DamageProjectile : MonoBehaviour
         if (particles == null)
             particles = GetComponentsInChildren<ParticleSystem>(true);
 
-        // Reuse the projectile's particles as a short, stationary burst.
+        // 투사체 파티클 재사용 단발 정지 폭발 연출
         foreach (ParticleSystem particle in particles)
         {
             particle.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -310,6 +319,7 @@ public sealed class DamageProjectile : MonoBehaviour
         }
     }
 
+    // 오프라인·미스폰 또는 네트워크 서버의 시뮬레이션 허용
     private bool HasServerSimulationAuthority()
     {
         if (networkObject == null)
@@ -319,6 +329,7 @@ public sealed class DamageProjectile : MonoBehaviour
                (networkObject.NetworkManager != null && networkObject.NetworkManager.IsServer);
     }
 
+    // 네트워크 초기화 계약 위반 시 폐기·예외 보고
     private void FailNetworkedInitialization(string reason)
     {
         initialized = false;

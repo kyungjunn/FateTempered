@@ -47,6 +47,7 @@ public class BossPlayerCollisionGuard : MonoBehaviour
 
     private void LateUpdate()
     {
+        // 서버·오프라인만 충돌 무시 유지; 클라이언트 비활성.
         if (!NetworkAuthority.CanSimulate(gameObject))
         {
             enabled = false;

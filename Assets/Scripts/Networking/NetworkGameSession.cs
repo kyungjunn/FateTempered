@@ -8,25 +8,27 @@ using Unity.Netcode.Transports.UTP;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+// 로컬 세션·UI 단계; 서버 복제 NetworkLobbyPhase와 구분.
 public enum NetworkGameSessionState
 {
-    Entry,
-    Browsing,
-    Creating,
-    Joining,
-    Lobby,
-    LoadingMatch,
-    Running,
-    Ended,
-    ReturningToLobby,
-    Stopping
+    Entry, // 시작 화면.
+    Browsing, // LAN 탐색.
+    Creating, // 호스트·로비 생성 대기.
+    Joining, // 연결·초기 동기화 대기.
+    Lobby, // 선택·준비.
+    LoadingMatch, // 명단 고정·전투 씬 로드.
+    Running, // 서버 시작·로컬 준비 완료.
+    Ended, // 결과 표시; 방·씬 유지.
+    ReturningToLobby, // 전투 씬 해제·동일 방 복귀.
+    Stopping // 연결·탐색·소유 씬 정리.
 }
 
-// Owns the local room, NGO, shared scene and cleanup lifetimes. Display labels are not identities.
+// 로컬 방·NGO·공유 씬·정리 수명 소유자; 표시 이름과 방 식별자 분리.
 [DefaultExecutionOrder(-200)]
 [RequireComponent(typeof(NetworkManager), typeof(UnityTransport), typeof(LanRoomDiscovery))]
 public sealed class NetworkGameSession : MonoBehaviour
 {
+    // 통신·제한 시간·공유 씬 정의; 의존성 역순 언로드.
     private const ushort GamePort = 7777;
     private const double LobbySynchronizationTimeout = 30.0;
     private const double SceneLoadTimeout = 60.0;
@@ -37,6 +39,7 @@ public sealed class NetworkGameSession : MonoBehaviour
     private const string EntrySceneName = "NetworkEntry";
     private static readonly string[] SceneUnloadOrder = { MapSceneName, InGameSceneName, LobbySceneName };
 
+    // PlayerCharacterId 인덱스별 NGO 등록 프리팹.
     [SerializeField] private GameObject[] playerPrefabs = new GameObject[3];
 
     [Header("Downed / Revive")]
@@ -45,6 +48,7 @@ public sealed class NetworkGameSession : MonoBehaviour
     [SerializeField, Range(0.05f, 1f)] private float reviveHealthRatio = 0.5f;
     [SerializeField] private float reviveInvulnerableSeconds = 2f;
 
+    // 서버 판 규칙·서버 시각 및 공유 복귀 언로드 결과.
     private MatchFlow matchFlow;
     private double matchStartedAt;
     private NetworkSceneManager.OnEventCompletedDelegateHandler unloadCompletedCallback;
@@ -60,6 +64,7 @@ public sealed class NetworkGameSession : MonoBehaviour
     private static NetworkGameSession instance;
     private static bool networkSessionActive;
 
+    // 로컬 서비스·복제 로비 참조 및 화면 표시 상태.
     private NetworkManager manager;
     private UnityTransport transport;
     private LanRoomDiscovery discovery;
@@ -71,6 +76,7 @@ public sealed class NetworkGameSession : MonoBehaviour
     private string displayName;
     private string roomName;
     private Guid roomInstanceId;
+    // 로컬 역할·서버 입장 정책·로컬 동기화와 전투 준비 상태.
     private bool isHost;
     private bool admissionOpen;
     private bool admissionLocked;
@@ -78,6 +84,7 @@ public sealed class NetworkGameSession : MonoBehaviour
     private bool localSynchronizationPending;
     private bool localCombatPrepared;
     private bool localCombatReady;
+    // 정리 진행·오류 고정 및 정리 후 목적지.
     private bool teardownStarted;
     private bool cleanupFaulted;
     private bool quitting;
@@ -85,12 +92,14 @@ public sealed class NetworkGameSession : MonoBehaviour
     private bool returnToBrowser;
     private bool returnToEntry;
     private bool unloadStarted;
+    // NGO 콜백 결과를 Update에서 처리할 로컬 씬 전이 기록.
     private bool pendingSceneLoadComplete;
     private bool pendingSceneLoadFailed;
     private string pendingSceneLoadFailure;
     private string expectedSceneName;
     private string queuedSceneName;
     private SceneLoadPurpose expectedScenePurpose;
+    // 로컬 비배율 제한 시간·이전 세션 콜백 차단 세대.
     private double actionDeadline;
     private double synchronizationDeadline;
     private double teardownDeadline;
@@ -98,11 +107,13 @@ public sealed class NetworkGameSession : MonoBehaviour
     private byte[] connectionPayload;
     private IPAddress joinAddress;
     private ushort joinPort;
+    // 서버 고정 명단·전원 완료 집계·임시 입장 예약.
     private NetworkLobbySnapshot frozenRoster;
     private readonly HashSet<ulong> frozenClientIds = new HashSet<ulong>();
     private readonly HashSet<ulong> completedSceneClients = new HashSet<ulong>();
     private readonly HashSet<ulong> completedUnloadClients = new HashSet<ulong>();
     private readonly Dictionary<ulong, PendingAdmission> pendingAdmissions = new Dictionary<ulong, PendingAdmission>(1);
+    // 로컬 소유 씬만 정리; 세션 이전 씬 보호.
     private readonly Dictionary<int, string> ownedScenes = new Dictionary<int, string>();
     private readonly HashSet<int> scenesPresentBeforeSession = new HashSet<int>();
     private readonly List<AsyncOperation> pendingSceneLoads = new List<AsyncOperation>(3);
@@ -113,6 +124,7 @@ public sealed class NetworkGameSession : MonoBehaviour
     private int cleanupUnloadSceneHandle;
     private int cleanupUnloadIndex;
 
+    // 세대 검증·정확한 구독 해제용 콜백 보관.
     private Action<NetworkManager.ConnectionApprovalRequest, NetworkManager.ConnectionApprovalResponse> approvalCallback;
     private Action<ulong> clientConnectedCallback;
     private Action<ulong> clientDisconnectedCallback;
@@ -125,6 +137,7 @@ public sealed class NetworkGameSession : MonoBehaviour
     private Action<NetworkLobbyState> lobbyChangedCallback;
     private Action<NetworkLobbyState> lobbyStartCallback;
 
+    // 탐색 종료 후 실행할 NGO 시작 방식.
     private enum PendingStart
     {
         None,
@@ -132,6 +145,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         Client
     }
 
+    // 서버 공유 씬 로드 단계의 목적.
     private enum SceneLoadPurpose
     {
         None,
@@ -179,12 +193,14 @@ public sealed class NetworkGameSession : MonoBehaviour
         lobby != null && lobby.CanStart && manager != null && manager.IsListening && manager.IsServer;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    // 도메인 재사용 시 정적 세션 초기화.
     private static void ResetStatics()
     {
         instance = null;
         networkSessionActive = false;
     }
 
+    // 단일 영속 세션·프로필·로컬 이벤트 초기화.
     private void Awake()
     {
         if (instance != null && instance != this)
@@ -209,6 +225,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         discovery.RoomsChanged += HandleDiscoveryRoomsChanged;
     }
 
+    // 지연 오류·비동기 완료·제한 시간·서버 판 규칙 전진.
     private void Update()
     {
         if (instance != this) return;
@@ -242,6 +259,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             AdvanceCleanup(now);
     }
 
+    // 앱 종료 시 세션 또는 탐색 종료 요청.
     private void OnApplicationQuit()
     {
         quitting = true;
@@ -251,6 +269,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             discovery.Stop();
     }
 
+    // 로컬 구독·NGO·스킬 세션 최종 해제.
     private void OnDestroy()
     {
         if (instance != this) return;
@@ -282,6 +301,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         instance = null;
     }
 
+    // 이전 탐색 종료 확인 후 방 목록 열기.
     public void OpenBrowser()
     {
         if (!CanStartUserOperation()) return;
@@ -303,6 +323,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         StartBrowsingNow();
     }
 
+    // 연결·탐색 정리 후 시작 화면 복귀.
     public void BackToStart()
     {
         if (teardownStarted || state == NetworkGameSessionState.Stopping)
@@ -330,6 +351,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         SetState(NetworkGameSessionState.Entry, "Ready.", null);
     }
 
+    // 호스트 입력 검증·새 방 ID 발급·NGO 시작 예약.
     public void CreateRoom(string requestedRoomName)
     {
         if (!CanStartUserOperation()) return;
@@ -393,6 +415,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             StartPendingNetwork(Time.unscaledTimeAsDouble);
     }
 
+    // 탐색 방·프로필·프리팹 검증 후 해당 방 접속 예약.
     public void JoinRoom(LanDiscoveredRoom room)
     {
         if (!CanStartUserOperation()) return;
@@ -459,6 +482,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             StartPendingNetwork(Time.unscaledTimeAsDouble);
     }
 
+    // 세션 이탈·정리 후 탐색 화면 복귀.
     public void Leave()
     {
         if (state == NetworkGameSessionState.Stopping) return;
@@ -474,6 +498,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         BeginStop(null, true, false);
     }
 
+    // 로비에서만 서버 챔피언 선택 요청.
     public void SelectChampion(PlayerCharacterId champion)
     {
         if (state != NetworkGameSessionState.Lobby || lobby == null || !Enum.IsDefined(typeof(PlayerCharacterId), champion))
@@ -481,6 +506,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         lobby.SelectChampion(champion);
     }
 
+    // 로비 준비 변경 요청 전달.
     public void SetReady(bool ready)
     {
         if (state != NetworkGameSessionState.Lobby || lobby == null)
@@ -488,6 +514,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         lobby.SetReady(ready);
     }
 
+    // 시작 요청 전달; 권한·명단은 서버 검증.
     public void RequestStart()
     {
         if (state != NetworkGameSessionState.Lobby || lobby == null)
@@ -495,8 +522,10 @@ public sealed class NetworkGameSession : MonoBehaviour
         lobby.RequestStart();
     }
 
+    // 콜백 내부 정리 재진입 방지용 다음 프레임 오류.
     private string deferredFailure;
 
+    // 활성·정리 중 세션과 중복 사용자 작업 차단.
     private bool CanStartUserOperation()
     {
         if (instance != this || state == NetworkGameSessionState.Stopping || networkSessionActive)
@@ -504,6 +533,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         return state == NetworkGameSessionState.Entry || state == NetworkGameSessionState.Browsing;
     }
 
+    // 프로필 확인·LAN 탐색 시작·로컬 상태 공개.
     private void StartBrowsingNow()
     {
         if (cleanupFaulted)
@@ -529,6 +559,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         SetState(NetworkGameSessionState.Browsing, discovery.Status.Message, error);
     }
 
+    // 저장 표시 이름 정규화·검증.
     private bool ValidateLocalDisplayName(out string normalizedName, out string validationError)
     {
         normalizedName = null;
@@ -540,6 +571,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         return true;
     }
 
+    // 캐릭터 ID·NetworkObject·NGO 프리팹 등록 일치 확인.
     private bool ValidatePlayerPrefabs(out string validationError)
     {
         validationError = null;
@@ -563,6 +595,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         return true;
     }
 
+    // 정원·방 ID·이름·IPv4 접속 대상 검증.
     private static bool ValidateDiscoveredRoom(LanDiscoveredRoom room, out string validationError)
     {
         validationError = null;
@@ -584,12 +617,14 @@ public sealed class NetworkGameSession : MonoBehaviour
         return true;
     }
 
+    // 접속 금지 IPv4 멀티캐스트 대역 판별.
     private static bool IsIpv4Multicast(IPAddress address)
     {
         byte[] bytes = address.GetAddressBytes();
         return bytes.Length == 4 && bytes[0] >= 224 && bytes[0] <= 239;
     }
 
+    // 현재 세대 확인·수동 스폰 설정·호스트 또는 클라이언트 시작.
     private void StartPendingNetwork(double now)
     {
         PendingStart start = pendingStart;
@@ -639,6 +674,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 세대별 NGO 구독; 이전 세션 지연 콜백 무시.
     private void SubscribeNetworkCallbacks(int callbackGeneration)
     {
         UnsubscribeNetworkCallbacks();
@@ -677,6 +713,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         manager.OnClientStarted += clientStartedCallback;
     }
 
+    // 세션 소유 NGO 구독만 해제.
     private void UnsubscribeNetworkCallbacks()
     {
         if (manager == null) return;
@@ -695,6 +732,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         clientStartedCallback = null;
     }
 
+    // 서버 시작 후 공유 TeamLobby 가산 로드 예약.
     private void HandleServerStarted()
     {
         if (state == NetworkGameSessionState.Stopping || !manager.IsServer)
@@ -714,6 +752,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // NGO 씬 관리 연결·클라이언트 초기 동기화 대기.
     private void HandleClientStarted()
     {
         if (state == NetworkGameSessionState.Stopping)
@@ -734,6 +773,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 씬 이벤트·허용 정책 연결; 서버가 가산 동기화 방식 결정.
     private void ConfigureNetworkSceneManager(bool asServer)
     {
         NetworkSceneManager sceneManager = manager.SceneManager;
@@ -774,6 +814,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             sceneManager.SetClientSynchronizationMode(LoadSceneMode.Additive);
     }
 
+    // NGO 씬 관리자 구독·참조 해제.
     private void UnsubscribeNetworkSceneEvents()
     {
         if (networkSceneManager != null)
@@ -790,18 +831,21 @@ public sealed class NetworkGameSession : MonoBehaviour
         synchronizeCompleteCallback = null;
     }
 
+    // 허용 공유 씬의 가산 로드만 승인; Entry 제외.
     private bool VerifySceneBeforeLoading(int buildIndex, string sceneName, LoadSceneMode mode)
     {
         return mode == LoadSceneMode.Additive && sceneName != EntrySceneName &&
                (sceneName == LobbySceneName || sceneName == InGameSceneName || sceneName == MapSceneName);
     }
 
+    // NGO 동기화 후 불필요 씬 정리 허용 여부.
     private bool VerifySceneBeforeUnloading(Scene scene)
     {
-        // DefaultSceneManagerHandler unloads when this predicate returns true.
+        // true이면 DefaultSceneManagerHandler가 언로드; Entry 유지.
         return scene.IsValid() && scene.name != EntrySceneName;
     }
 
+    // 서버 공유 로드 실행; 중복·수명 단계 불일치 차단.
     private void ProcessQueuedNetworkSceneLoad()
     {
         if (string.IsNullOrEmpty(queuedSceneName) || state == NetworkGameSessionState.Stopping)
@@ -861,6 +905,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             SetState(NetworkGameSessionState.LoadingMatch, "Loading Map on every participant.", null);
     }
 
+    // 로컬 비동기 로드 추적; 진행 UI·정리 대기 기준.
     private void HandleNetworkSceneLoadStarted(ulong clientId, string sceneName, LoadSceneMode mode,
         AsyncOperation operation)
     {
@@ -871,9 +916,11 @@ public sealed class NetworkGameSession : MonoBehaviour
         pendingSceneLoads.Add(operation);
     }
 
+    // 서버 공유 씬 로드 완료 집계; 전이 처리는 Update.
     private void HandleNetworkLoadCompleted(string sceneName, LoadSceneMode mode,
         List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
     {
+        // 서버의 현재 로드 결과 집계; 실제 전이는 Update에서 처리.
         if (!manager.IsServer || mode != LoadSceneMode.Additive || sceneName != expectedSceneName ||
             state == NetworkGameSessionState.Stopping)
         {
@@ -895,6 +942,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         pendingSceneLoadComplete = true;
     }
 
+    // 고정 명단 전원 완료 확인 후 TeamLobby → InGame → Map 전진.
     private void ProcessCompletedNetworkSceneLoad()
     {
         if (!pendingSceneLoadComplete || state == NetworkGameSessionState.Stopping)
@@ -937,6 +985,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 서버 로비 초기화·입장 개방·LAN 광고 시작.
     private void CompleteHostLobbySetup()
     {
         NetworkLobbyState loadedLobby = FindLobbyState();
@@ -958,6 +1007,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         UpdateHostAdvertisement();
     }
 
+    // 서버는 입장 확정 시도; 클라이언트는 방·호스트 검증 후 로비 연결.
     private void HandleSynchronizeComplete(ulong clientId)
     {
         if (state == NetworkGameSessionState.Stopping || !networkSessionActive)
@@ -1005,6 +1055,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         SetState(NetworkGameSessionState.Lobby, "Joined " + roomName + ". Choose a champion and ready up.", null);
     }
 
+    // 서버 방 ID·프로필·정원 검증 후 동기화 대기 슬롯 확보; 자동 스폰 금지.
     private void ApproveConnection(NetworkManager.ConnectionApprovalRequest request,
         NetworkManager.ConnectionApprovalResponse response)
     {
@@ -1071,6 +1122,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         response.Reason = string.Empty;
     }
 
+    // 사유 포함 접속 거절 응답 확정.
     private static void RejectConnection(NetworkManager.ConnectionApprovalResponse response, string reason)
     {
         response.Approved = false;
@@ -1079,8 +1131,10 @@ public sealed class NetworkGameSession : MonoBehaviour
         response.Reason = reason;
     }
 
+    // 서버: 입장 확정 시도. 클라이언트: 로비 동기화 대기.
     private void HandleClientConnected(ulong clientId)
     {
+        // 서버 연결 완료 기록·입장 확정 시도; 클라이언트는 동기화 대기.
         if (state == NetworkGameSessionState.Stopping)
             return;
         if (!manager.IsServer)
@@ -1103,6 +1157,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         TryCommitPendingAdmission(clientId);
     }
 
+    // 연결·씬 동기화가 모두 완료된 참가자만 서버 명단에 추가.
     private void TryCommitPendingAdmission(ulong clientId)
     {
         if (!pendingAdmissions.TryGetValue(clientId, out PendingAdmission pending) ||
@@ -1130,8 +1185,10 @@ public sealed class NetworkGameSession : MonoBehaviour
         SetState(NetworkGameSessionState.Lobby, pending.DisplayName + " joined the room.", null);
     }
 
+    // 이탈 처리: 로드·복귀 중단, 전투 중 명단 유지.
     private void HandleClientDisconnected(ulong clientId)
     {
+        // 단계별 이탈 처리; 로드·복귀 중 중단, 전투 중 남은 명단 유지.
         if (!networkSessionActive)
             return;
 
@@ -1199,6 +1256,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 서버 승인 대기 만료자 제거·연결 해제·광고 갱신.
     private void CheckPendingAdmissionDeadlines(double now)
     {
         if (!manager.IsServer || pendingAdmissions.Count == 0 || state == NetworkGameSessionState.Stopping)
@@ -1225,6 +1283,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         UpdateHostAdvertisement();
     }
 
+    // 복제 로비를 로컬 화면·전투 수명에 반영; 다른 방 상태 거부.
     private void OnLobbyChanged(NetworkLobbyState changedLobby)
     {
         if (changedLobby != lobby || !networkSessionActive || state == NetworkGameSessionState.Stopping)
@@ -1272,6 +1331,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         RaiseChanged();
     }
 
+    // 서버 호스트 전용 명단 잠금·접속 확인·전투 로드 예약.
     private void OnLobbyStartRequested(NetworkLobbyState requestedLobby)
     {
         if (requestedLobby != lobby || state != NetworkGameSessionState.Lobby || !manager.IsServer || !isHost)
@@ -1314,6 +1374,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         SetState(NetworkGameSessionState.LoadingMatch, "Roster locked. Loading the shared match.", null);
     }
 
+    // 서버 전원 로드 확인 후 서비스 준비·스폰·Running 공개.
     private void CompleteSharedMapLoad()
     {
         if (teardownStarted || state != NetworkGameSessionState.LoadingMatch)
@@ -1367,6 +1428,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         matchFlow.MatchEnded += HandleMatchEnded;
     }
 
+    // Running 서버에서만 판 규칙 진행·부활 상태 복제.
     private void TickMatchFlow()
     {
         if (matchFlow == null || matchFlow.Ended || manager == null || !manager.IsServer ||
@@ -1377,6 +1439,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             PublishReviveSnapshot();
     }
 
+    // 현재 판 시작 세대와 일치하는 부활 예약만 서버 게시.
     private void PublishReviveSnapshot()
     {
         if (lobby == null || !lobby.IsSpawned || matchFlow == null || matchFlow.Ended || manager == null ||
@@ -1398,6 +1461,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         lobby.PublishRevives(revives);
     }
 
+    // 멤버 부활 예약의 서버 시각 기반 복제 슬롯 생성.
     private ReviveSnapshotSlot BuildReviveSlot(NetworkLobbyMemberSnapshot member)
     {
         if (!member.Occupied || !matchFlow.TryGetReviveTime(member.ClientId, out double reviveAtServerTime))
@@ -1473,6 +1537,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         SetState(NetworkGameSessionState.Ended, "The match is over.", null);
     }
 
+    // 권위 결과 단발 수신·로컬 저장·구독자별 예외 격리.
     private void HandleMatchResult(MatchResult result)
     {
         if (matchResultReceived)
@@ -1503,6 +1568,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 다음 판 전 로컬 결과·중복 수신 방지 상태 초기화.
     private void ResetMatchResult()
     {
         matchResultReceived = false;
@@ -1553,6 +1619,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         QueueNextReturnUnload();
     }
 
+    // 서버 소유권·로비 유지 확인 후 Map → InGame 순차 해제.
     private void QueueNextReturnUnload()
     {
         if (state != NetworkGameSessionState.ReturningToLobby || manager == null || !manager.IsListening ||
@@ -1605,9 +1672,11 @@ public sealed class NetworkGameSession : MonoBehaviour
             BeginStop("NGO did not start the " + sceneName + " unload (" + status + ").", true, false);
     }
 
+    // 서버 복귀 언로드 완료 집계; 로비 멤버 전원 필수.
     private void HandleNetworkUnloadCompleted(string sceneName, LoadSceneMode mode,
         List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
     {
+        // 서버 복귀 결과 집계; 현재 로비 멤버 전원 완료 필수.
         if (state != NetworkGameSessionState.ReturningToLobby || sceneName != expectedUnloadSceneName)
             return;
 
@@ -1644,6 +1713,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 빈 슬롯 허용·점유자의 연결·동기화·언로드 완료 확인.
     private bool IsCurrentMemberUnloadComplete(NetworkLobbyMemberSnapshot member)
     {
         if (!member.Occupied) return true;
@@ -1651,6 +1721,7 @@ public sealed class NetworkGameSession : MonoBehaviour
                completedUnloadClients.Contains(member.ClientId);
     }
 
+    // NGO 완료와 로컬 씬 해제 확인 후 다음 복귀 단계 실행.
     private void ProcessCompletedReturnUnload()
     {
         if (!pendingUnloadComplete || state != NetworkGameSessionState.ReturningToLobby)
@@ -1680,6 +1751,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         QueueNextReturnUnload();
     }
 
+    // 서버 로비 재공개·판 기록 초기화·입장과 LAN 광고 재개.
     private void CompleteReturnToLobby()
     {
         RemoveCompletedSceneOperations();
@@ -1734,6 +1806,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         UpdateHostAdvertisement();
     }
 
+    // 서버 고정 명단을 Map에 소유권 지정 생성; 부분 실패 시 개별 정리.
     private bool SpawnFrozenPlayers(Scene map, out string spawnError)
     {
         spawnError = null;
@@ -1833,6 +1906,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         return true;
     }
 
+    // 각 피어의 로컬 준비와 서버 Running 복제가 모두 끝난 뒤 전투 허용.
     private void TryPrepareLocalCombat()
     {
         if (!networkSessionActive || state == NetworkGameSessionState.Stopping || localCombatReady ||
@@ -1867,6 +1941,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 로컬 Map·매니저·스폰 지점 검증 및 전투 세션 시작.
     private bool TryPrepareLocalCombatServices(Scene map, out string readinessError)
     {
         readinessError = null;
@@ -1900,6 +1975,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         return true;
     }
 
+    // TeamLobby의 유일한 스폰 로비 검색; 중복은 오류 취급.
     private NetworkLobbyState FindLobbyState()
     {
         Scene lobbyScene = SceneManager.GetSceneByName(LobbySceneName);
@@ -1923,6 +1999,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         return found;
     }
 
+    // 현재 세대 로비 변경·시작·결과 이벤트 구독.
     private void AttachLobby(NetworkLobbyState newLobby)
     {
         DetachLobby();
@@ -1941,6 +2018,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         lobby.MatchResultReceived += HandleMatchResult;
     }
 
+    // 로비 구독·로컬 참조 해제.
     private void DetachLobby()
     {
         if (lobby != null)
@@ -1954,6 +2032,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         lobbyStartCallback = null;
     }
 
+    // 호스트 광고 갱신; 동기화 대기자도 정원에 포함.
     private void UpdateHostAdvertisement()
     {
         if (!isHost || lobby == null || state != NetworkGameSessionState.Lobby ||
@@ -1976,6 +2055,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 탐색 상태·오류 반영; 활성 호스트 광고 오류는 세션 종료.
     private void HandleDiscoveryStatusChanged(LanRoomDiscoveryStatus changedStatus)
     {
         if (changedStatus == null) return;
@@ -1998,12 +2078,14 @@ public sealed class NetworkGameSession : MonoBehaviour
             SetState(state, changedStatus.Message, error);
     }
 
+    // 탐색 화면의 방 목록 변경 통지.
     private void HandleDiscoveryRoomsChanged(IReadOnlyList<LanDiscoveredRoom> rooms)
     {
         if (state == NetworkGameSessionState.Browsing)
             RaiseChanged();
     }
 
+    // 세션 이후 생성된 공유 씬의 로컬 소유권 기록.
     private void HandleLocalSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         if (!networkSessionActive || !IsOwnedSceneName(scene.name) || scenesPresentBeforeSession.Contains(scene.handle))
@@ -2011,6 +2093,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         ownedScenes[scene.handle] = scene.name;
     }
 
+    // 소유권 제거·정상 종료 경로 외 공유 씬 유실 감지.
     private void HandleLocalSceneUnloaded(Scene scene)
     {
         ownedScenes.Remove(scene.handle);
@@ -2023,6 +2106,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 탐색 종료·동기화·공유 로드·복귀 언로드 제한 시간 점검.
     private void CheckLifecycleDeadlines(double now)
     {
         if (state == NetworkGameSessionState.Stopping)
@@ -2056,6 +2140,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             BeginStop("The shared " + expectedSceneName + " scene load timed out.", true, false);
     }
 
+    // 로컬 씬 핸들로 현재 로드된 씬 검색.
     private static Scene FindLoadedScene(int handle)
     {
         for (int i = 0; i < SceneManager.sceneCount; i++)
@@ -2066,6 +2151,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         return default;
     }
 
+    // 중복 정리 차단·입장 폐쇄·Stopping 공개·스킬 종료 후 NGO 종료 요청.
     private void BeginStop(string reason, bool browseAfterStop, bool appIsQuitting)
     {
         if (teardownStarted)
@@ -2138,6 +2224,7 @@ public sealed class NetworkGameSession : MonoBehaviour
             return;
     }
 
+    // NGO·로컬 플레이어 스킬 중복 없이 종료·로컬 등록 해제.
     private void EndAllPlayerSkillSessions()
     {
         List<PlayerSkillController> affectedSkills = new List<PlayerSkillController>(2);
@@ -2182,12 +2269,14 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 스킬 세션 중복 종료 방지용 수집.
     private static void AddSkillSession(List<PlayerSkillController> sessions, PlayerSkillController skills)
     {
         if (skills != null && !sessions.Contains(skills))
             sessions.Add(skills);
     }
 
+    // 스킬 정리 실패 기록·재시작 차단 상태 고정.
     private void RecordSkillCleanupFault(Exception exception)
     {
         string message = "A player's skill cleanup failed before NGO teardown: " + exception.Message;
@@ -2197,6 +2286,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         RaiseChanged();
     }
 
+    // 특정 NGO 플레이어의 스킬 종료·실패 격리.
     private void EndPlayerSkillSession(ulong clientId)
     {
         if (manager == null || manager.SpawnManager == null)
@@ -2215,6 +2305,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 탐색·NGO·진행 로드 종료 대기 후 소유 씬만 역순 정리.
     private void AdvanceCleanup(double now)
     {
         if (!teardownStarted) return;
@@ -2313,6 +2404,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         FinishTeardown();
     }
 
+    // 완료된 로컬 비동기 로드 추적 항목 제거.
     private void RemoveCompletedSceneOperations()
     {
         for (int i = pendingSceneLoads.Count - 1; i >= 0; i--)
@@ -2323,12 +2415,14 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 정리 시간 초과의 재시작 차단 오류 기록.
     private void CheckCleanupTimeout(double now, string message)
     {
         if (now >= teardownDeadline)
             RecordCleanupFault(message + " Restart remains blocked until cleanup is complete.");
     }
 
+    // 첫 정리 오류 보존·Stopping 유지.
     private void RecordCleanupFault(string message)
     {
         if (status.StartsWith("Cleanup fault: ", StringComparison.Ordinal))
@@ -2339,6 +2433,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         SetState(NetworkGameSessionState.Stopping, status, error);
     }
 
+    // 구독·기록 해제; 정리 오류가 없을 때만 시작·탐색 화면 복귀.
     private void FinishTeardown()
     {
         UnsubscribeNetworkCallbacks();
@@ -2413,6 +2508,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 새 방 작업 전 이전 판·씬·입장 추적 초기화.
     private void ClearRunRecords()
     {
         pendingAdmissions.Clear();
@@ -2441,6 +2537,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         unloadStarted = false;
     }
 
+    // 로컬 상태·메시지 갱신 및 UI 통지.
     private void SetState(NetworkGameSessionState newState, string newStatus, string newError)
     {
         state = newState;
@@ -2449,6 +2546,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         RaiseChanged();
     }
 
+    // 로컬 상태 변경 통지·구독 예외 기록.
     private void RaiseChanged()
     {
         try
@@ -2461,6 +2559,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         }
     }
 
+    // 정리에서 보호할 기존 로컬 씬 핸들 기록.
     private void CapturePreexistingScenes()
     {
         scenesPresentBeforeSession.Clear();
@@ -2468,11 +2567,13 @@ public sealed class NetworkGameSession : MonoBehaviour
             scenesPresentBeforeSession.Add(SceneManager.GetSceneAt(i).handle);
     }
 
+    // 세션이 소유 가능한 공유 씬 이름 판별.
     private static bool IsOwnedSceneName(string sceneName)
     {
         return sceneName == LobbySceneName || sceneName == InGameSceneName || sceneName == MapSceneName;
     }
 
+    // 서버 승인 후 연결·씬 동기화를 각각 기다리는 임시 입장 기록.
     private struct PendingAdmission
     {
         public readonly string DisplayName;
@@ -2480,6 +2581,7 @@ public sealed class NetworkGameSession : MonoBehaviour
         public bool Connected;
         public bool Synchronized;
 
+        // 표시 이름·로컬 제한 시간 고정 및 완료 조건 초기화.
         public PendingAdmission(string displayName, double deadline)
         {
             DisplayName = displayName;

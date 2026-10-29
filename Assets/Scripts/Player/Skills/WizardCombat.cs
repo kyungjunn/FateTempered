@@ -122,6 +122,7 @@ public sealed class WizardCombat : MonoBehaviour
     {
         get
         {
+            // 서버·오프라인만 오버드라이브 활성.
             if (!NetworkAuthority.CanSimulate(gameObject) || overdrive == null || overdrive.Cancelled || IsOwnerDead())
                 return false;
 
@@ -190,6 +191,7 @@ public sealed class WizardCombat : MonoBehaviour
         if (IsGamePaused)
             return;
 
+        // 서버·오프라인만 마법 상태 갱신.
         if (!NetworkAuthority.CanSimulate(gameObject))
             return;
 
@@ -201,6 +203,7 @@ public sealed class WizardCombat : MonoBehaviour
 
     public bool TryCast(WizardSkillSO skill)
     {
+        // 서버·오프라인만 시전.
         if (!NetworkAuthority.CanSimulate(gameObject) ||
             !isActiveAndEnabled || !gameObject.activeInHierarchy || skill == null ||
             owner == null || damageDealer == null || IsOwnerDead() || IsGamePaused)

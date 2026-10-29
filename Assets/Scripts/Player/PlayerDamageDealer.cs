@@ -10,15 +10,18 @@ public enum PlayerDamageType
 // 플레이어가 적에게 준 실제 피해량과 출처를 한 곳에서 전달한다.
 public class PlayerDamageDealer : MonoBehaviour
 {
+    // 권한 측 실제 피해 확정 알림: 흡혈·게이지 및 명중 후처리
     public event Action<int, PlayerDamageType> OnDamageDealt;
     public event Action<EnemyHealth, Vector3, int, PlayerDamageType> OnTargetDamaged;
 
+    // 서버·오프라인 전용 피해 처리; 클라이언트 복제본의 중복 피해 차단
     public int DealDamage(EnemyHealth enemy, int damage, PlayerDamageType damageType,
         Vector3? attackSourcePosition = null)
     {
         if (TryGetComponent(out PlayerSkillController skills) && skills.IsSessionEnded)
             return 0;
 
+        // 공격자·피격자 양쪽 시뮬레이션 권한 필수
         if (!NetworkAuthority.CanSimulate(gameObject) || enemy == null ||
             !NetworkAuthority.CanSimulate(enemy.gameObject) || enemy.IsDead || damage <= 0)
         {

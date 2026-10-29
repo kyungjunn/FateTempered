@@ -3,18 +3,23 @@ using Unity.Netcode.Transports.UTP;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+// 독립 네트워크 테스트용 접속·캐릭터 승인·전투 상태 화면
 [RequireComponent(typeof(NetworkManager), typeof(UnityTransport))]
 public sealed class NetworkTestSession : MonoBehaviour
 {
+    // 승인 가능한 캐릭터 프리팹과 서버 생성용 전투 표적
     [SerializeField] private GameObject[] playerPrefabs;
     [SerializeField] private GameObject combatTargetPrefab;
+    // 로컬 테스트 화면의 캐릭터 선택과 이름 목록
     private int selectedCharacter = (int)PlayerCharacterId.Ninja;
     private static readonly string[] CharacterNames = { "Sword", "Ninja", "Wizard" };
+    // 필수 네트워크 컴포넌트와 로컬 접속 입력·상태 문구
     private NetworkManager manager;
     private UnityTransport transport;
     private string address = "127.0.0.1";
     private string status = "Start Host in one instance, Client in another. UDP port 7777.";
 
+    // 필수 컴포넌트 조회와 접속·승인·서버 시작 구독
     private void Awake()
     {
         manager = GetComponent<NetworkManager>();
@@ -26,6 +31,7 @@ public sealed class NetworkTestSession : MonoBehaviour
         manager.OnServerStarted += SpawnCombatTargets;
     }
 
+    // 네트워크 이벤트 구독 해제
     private void OnDestroy()
     {
         if (manager == null) return;
@@ -36,9 +42,11 @@ public sealed class NetworkTestSession : MonoBehaviour
         manager.OnServerStarted -= SpawnCombatTargets;
     }
 
+    // 테스트 전용 1바이트 캐릭터 페이로드 검증과 서버의 플레이어 생성 승인
     private void ApproveConnection(NetworkManager.ConnectionApprovalRequest request,
         NetworkManager.ConnectionApprovalResponse response)
     {
+        // 빈 페이로드의 기본 닌자 선택과 복수 바이트 요청 거부
         int character = request.Payload.Length == 0 ? (int)PlayerCharacterId.Ninja : request.Payload[0];
         if (request.Payload.Length > 1 || playerPrefabs == null || character >= playerPrefabs.Length ||
             playerPrefabs[character] == null ||
@@ -58,6 +66,7 @@ public sealed class NetworkTestSession : MonoBehaviour
         response.Pending = false;
     }
 
+    // 서버 시작 시 테스트 전투 표적의 네트워크 생성
     private void SpawnCombatTargets()
     {
         if (combatTargetPrefab == null) return;
@@ -69,6 +78,7 @@ public sealed class NetworkTestSession : MonoBehaviour
         }
     }
 
+    // 접속 중 취소 키의 테스트 세션 종료
     private void Update()
     {
         if (manager.IsListening && !manager.ShutdownInProgress &&
@@ -79,21 +89,25 @@ public sealed class NetworkTestSession : MonoBehaviour
         }
     }
 
+    // 접속 성공과 테스트 조작 안내 표시
     private void OnConnected(ulong clientId)
     {
         status = $"Client {clientId} connected. WASD: move, mouse: look, Space: jump, Esc: disconnect.";
     }
 
+    // 연결 해제와 네트워크 종료 사유 표시
     private void OnDisconnected(ulong clientId)
     {
         status = $"Client {clientId} disconnected. {manager.DisconnectReason}";
     }
 
+    // 전송 계층 실패 안내 표시
     private void OnTransportFailure()
     {
         status = "Transport failed. Check the address and whether port 7777 is already in use.";
     }
 
+    // 테스트 전용 접속 조작과 로컬 스킬·서버 판정 체력 표시
     private void OnGUI()
     {
         GUILayout.BeginArea(new Rect(12, 12, 460, 370), GUI.skin.box);

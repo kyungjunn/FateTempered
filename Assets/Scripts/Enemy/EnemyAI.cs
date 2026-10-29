@@ -70,6 +70,7 @@ public class EnemyAI : MonoBehaviour
 
     private void Update()
     {
+        // 서버·오프라인 AI 실행 권한, 클라이언트 AI 비활성화
         if (!NetworkAuthority.CanSimulate(gameObject))
         {
             enabled = false;

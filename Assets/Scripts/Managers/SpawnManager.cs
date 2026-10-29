@@ -37,6 +37,7 @@ public class SpawnManager : MonoBehaviour
     [SerializeField] private int maximumAliveEnemies = 24;
 
     [Header("Co-op Scaling (2 players)")]
+    // 협동 전투의 적 수·주기·동시 생성·체력 배율
     [SerializeField] private float coopMaxAliveMultiplier = 1.6f;
     [SerializeField] private float coopSpawnIntervalMultiplier = 0.75f;
     [SerializeField] private int coopExtraEnemiesPerSpawn = 1;
@@ -56,8 +57,10 @@ public class SpawnManager : MonoBehaviour
     private Coroutine enemySpawnRoutine;
     private float spawnStartTime;
     private bool sessionEnded;
+    // 서버 적 생성 활성 상태·생성 대상 네트워크 맵
     private bool networkEnemySpawning;
     private Scene networkMapScene;
+    // 경기 시작 인원·협동 배율 적용 상한 조건
     private int matchPlayerCount = 1;
 
     public int AliveEnemyCount
@@ -69,12 +72,14 @@ public class SpawnManager : MonoBehaviour
         }
     }
 
+    // 네트워크 세션의 로컬 플레이어 중복 생성 차단
     private bool CanRunOfflineSpawning => !sessionEnded && !NetworkGameSession.IsNetworkSessionActive;
 
     // 오프라인 또는 네트워크 서버의 진행 중 전투.
     private bool CanRunEnemySpawning => !sessionEnded && (!NetworkGameSession.IsNetworkSessionActive ||
         (networkEnemySpawning && IsNetworkServer() && networkMapScene.IsValid() && networkMapScene.isLoaded));
 
+    // 리스닝 중 서버의 생성 권한
     private static bool IsNetworkServer()
     {
         NetworkManager manager = NetworkManager.Singleton;
@@ -84,6 +89,7 @@ public class SpawnManager : MonoBehaviour
     // 현재 접속 중인 전투 인원. 팀원이 나가면 스폰 배율만 낮아진다.
     private bool IsCoop => NetworkGameSession.IsNetworkSessionActive && CountLivePlayers() >= 2 && matchPlayerCount >= 2;
 
+    // 타깃 레지스트리의 활성 참가자 수
     private static int CountLivePlayers()
     {
         int count = 0;
@@ -184,6 +190,7 @@ public class SpawnManager : MonoBehaviour
         return true;
     }
 
+    // 로드된 네트워크 맵의 2인 스폰 지점 수집·계층 순서 정렬
     public bool TryGetNetworkSpawnPoints(Scene map, out Transform[] points)
     {
         points = Array.Empty<Transform>();
@@ -215,6 +222,7 @@ public class SpawnManager : MonoBehaviour
         return true;
     }
 
+    // 서버 전용 플레이어 인스턴스 준비·NGO 스폰 전 맵 배치
     public GameObject SpawnNetworkPlayer(GameObject prefab, Vector3 position, Quaternion rotation, Scene scene)
     {
         NetworkManager networkManager = NetworkManager.Singleton;
@@ -229,6 +237,7 @@ public class SpawnManager : MonoBehaviour
             Debug.LogError("Network players can only be spawned into a loaded Map scene.", this);
             return null;
         }
+        // NGO 등록 프리팹·캐릭터 식별자·유효한 생성 자세 검증
         if (prefab == null || prefab.scene.IsValid() ||
             !prefab.TryGetComponent(out NetworkObject networkPrefab) || networkPrefab.IsSpawned ||
             !prefab.TryGetComponent(out PlayerCharacter character) ||
@@ -255,6 +264,7 @@ public class SpawnManager : MonoBehaviour
         }
     }
 
+    // 네트워크 생성 위치·회전의 비정상 수치 차단
     private static bool IsFinite(Vector3 value) => IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
 
     private static bool IsFinite(Quaternion value) => IsFinite(value.x) && IsFinite(value.y) &&
@@ -262,6 +272,7 @@ public class SpawnManager : MonoBehaviour
 
     private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
+    // 참가자 스폰 지점의 결정적 계층 순서 비교
     private static int CompareSceneHierarchy(Transform left, Transform right)
     {
         List<int> leftIndices = GetHierarchyIndices(left);
@@ -275,6 +286,7 @@ public class SpawnManager : MonoBehaviour
         return leftIndices.Count.CompareTo(rightIndices.Count);
     }
 
+    // 루트부터 대상까지의 형제 인덱스 경로
     private static List<int> GetHierarchyIndices(Transform target)
     {
         List<int> indices = new List<int>();
@@ -313,6 +325,7 @@ public class SpawnManager : MonoBehaviour
         return true;
     }
 
+    // 모든 적 프리팹의 NetworkObject·NGO 등록 여부 검증
     private bool ValidateNetworkEnemyPrefabs(out string error)
     {
         error = null;
@@ -593,6 +606,7 @@ public class SpawnManager : MonoBehaviour
         return enemy;
     }
 
+    // 서버 적 생성·협동 체력 적용 후 NGO 동기화
     private GameObject SpawnNetworkEnemy(GameObject prefab, Vector3 position, Quaternion rotation)
     {
         GameObject enemy = null;
@@ -602,6 +616,7 @@ public class SpawnManager : MonoBehaviour
             SceneManager.MoveGameObjectToScene(enemy, networkMapScene);
             if (IsCoop && enemy.TryGetComponent(out EnemyHealth health))
                 health.ApplyHealthMultiplier(coopEnemyHealthMultiplier);
+            // 맵 씬 제거 시 함께 소멸하는 네트워크 적
             enemy.GetComponent<NetworkObject>().Spawn(true);
         }
         catch (Exception exception)
@@ -616,6 +631,7 @@ public class SpawnManager : MonoBehaviour
         return enemy;
     }
 
+    // 네트워크 참가자 레벨 이벤트 구독 목록
     private readonly List<PlayerLevelSystem> boundLevelSystems = new List<PlayerLevelSystem>(2);
 
     private void BindPlayerLevelSystem(GameObject playerObject)
@@ -628,6 +644,7 @@ public class SpawnManager : MonoBehaviour
         }
     }
 
+    // 서버 적 해금 판정용 참가자별 레벨 이벤트 연결
     private void BindNetworkLevelSystems()
     {
         UnbindPlayerLevelSystem();

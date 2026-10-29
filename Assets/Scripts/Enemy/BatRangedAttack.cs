@@ -9,6 +9,7 @@ public sealed class BatRangedAttack : EnemyAttack
     [SerializeField, Min(0f)] private float forwardOffset = 0.65f;
     [SerializeField, Min(0f)] private float targetHeight = 1f;
 
+    // 권한 검사 완료 후 서버·오프라인 투사체 생성
     protected override void DealDamage(Transform target)
     {
         if (projectilePrefab == null || target == null)
@@ -42,10 +43,12 @@ public sealed class BatRangedAttack : EnemyAttack
             }
             UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(instance, gameObject.scene);
             projectileObject.Spawn(true);
+            // 서버 원본만 이동·충돌 판정 개시
             projectile.Launch(transform, direction, CurrentAttackDamage);
             return;
         }
 
+        // 오프라인 투사체 직접 실행
         projectile.Launch(transform, direction, CurrentAttackDamage);
     }
 

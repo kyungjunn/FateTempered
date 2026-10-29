@@ -18,6 +18,7 @@ public sealed class NinjaHwaDunSkillSO : PlayerSkillSO
     public override bool Cast(PlayerSkillController owner, PlayerDamageType damageType)
     {
         // 필수 참조 및 기존 화둔 채널 중복 검사.
+        // 서버·오프라인만 시전.
         if (flamethrowerPrefab == null || owner == null || owner.SkillOrigin == null ||
             owner.DamageDealer == null || !NetworkAuthority.CanSimulate(owner.gameObject))
             return false;

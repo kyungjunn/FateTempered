@@ -1,24 +1,30 @@
 using System;
 using System.Text;
 
-// Fixed-endian, exact-length discovery datagrams. This codec has no socket or Unity dependencies.
+// 고정 바이트 순서·정확한 길이의 탐색 코덱 — 소켓·Unity 의존성 없음
 public static class LanDiscoveryProtocol
 {
+    // 데이터그램 상한·UDP 포트·호환 버전·고정 방 정원
     public const int MaxDatagramBytes = 512;
     public const int DiscoveryPort = 47777;
     public const ushort DefaultGamePort = 7777;
     public const byte ProtocolVersion = 1;
     public const byte RoomCapacity = 2;
 
-    private const uint Magic = 0x4C414E44; // "LAND"
+    // 공통 헤더 14바이트: 식별자 4 + 버전 1 + 종류 1 + 요청 난수 8
+    private const uint Magic = 0x4C414E44; // 식별자 "LAND"
     private const byte QueryKind = 1;
     private const byte AdvertisementKind = 2;
     private const int HeaderLength = 14;
+    // 광고: 헤더 + GUID 16 + 순번 4 + 포트 2 + 이름 길이 1 + 이름 + 인원·정원·수락 각 1
     private const int AdvertisementFixedLength = 40;
+    // 잘못된 UTF-8·유니코드의 묵시적 대체 금지
     private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
+    // 검증 완료 광고 값 — 요청 난수는 별도 반환
     public struct Advertisement
     {
+        // 방 식별·최신성·접속 경로·표시·입장 가능 상태
         public Guid RoomInstanceId { get; private set; }
         public uint Sequence { get; private set; }
         public ushort GamePort { get; private set; }
@@ -27,6 +33,7 @@ public static class LanDiscoveryProtocol
         public byte Capacity { get; private set; }
         public bool Accepting { get; private set; }
 
+        // 디코딩 결과 스냅샷 구성
         internal Advertisement(
             Guid roomInstanceId,
             uint sequence,
@@ -46,6 +53,7 @@ public static class LanDiscoveryProtocol
         }
     }
 
+    // 0이 아닌 요청 난수의 고정 길이 질의 인코딩
     public static bool TryEncodeQuery(ulong requestNonce, byte[] destination, out int bytesWritten)
     {
         bytesWritten = 0;
@@ -59,6 +67,7 @@ public static class LanDiscoveryProtocol
         return true;
     }
 
+    // 질의 종류·정확한 길이·요청 난수 검증
     public static bool TryDecodeQuery(byte[] datagram, int offset, int count, out ulong requestNonce)
     {
         requestNonce = 0;
@@ -71,6 +80,7 @@ public static class LanDiscoveryProtocol
         return requestNonce != 0;
     }
 
+    // 방 상태 불변식·정규형 이름·버퍼 크기 검증 후 광고 인코딩
     public static bool TryEncodeAdvertisement(
         ulong requestNonce,
         Guid roomInstanceId,
@@ -139,6 +149,7 @@ public static class LanDiscoveryProtocol
         return true;
     }
 
+    // 비신뢰 광고의 구조·길이·이름·인원 일관성 검증 — 송신자 인증 아님
     public static bool TryDecodeAdvertisement(
         byte[] datagram,
         int offset,
@@ -207,6 +218,7 @@ public static class LanDiscoveryProtocol
         return true;
     }
 
+    // 배열 범위·최대 크기·프로토콜 식별자와 버전 검증
     private static bool HasValidHeader(byte[] datagram, int offset, int count)
     {
         if (datagram == null || offset < 0 || count < HeaderLength || count > MaxDatagramBytes ||
@@ -218,6 +230,7 @@ public static class LanDiscoveryProtocol
         return ReadUInt32(datagram, offset) == Magic && datagram[offset + 4] == ProtocolVersion;
     }
 
+    // 공통 헤더 기록 — 요청 난수로 질의·응답 연결
     private static void WriteHeader(byte[] destination, byte kind, ulong requestNonce)
     {
         WriteUInt32(destination, 0, Magic);
@@ -226,6 +239,7 @@ public static class LanDiscoveryProtocol
         WriteUInt64(destination, 6, requestNonce);
     }
 
+    // GUID 앞 세 필드의 네트워크 바이트 순서 기록
     private static void WriteGuid(byte[] destination, int offset, Guid value)
     {
         byte[] bytes = value.ToByteArray();
@@ -240,6 +254,7 @@ public static class LanDiscoveryProtocol
         Buffer.BlockCopy(bytes, 8, destination, offset + 8, 8);
     }
 
+    // 네트워크 순서 GUID의 .NET 형식 복원
     private static Guid ReadGuid(byte[] datagram, int offset)
     {
         byte[] bytes = new byte[16];
@@ -255,17 +270,20 @@ public static class LanDiscoveryProtocol
         return new Guid(bytes);
     }
 
+    // 16비트 부호 없는 정수의 빅 엔디언 기록
     private static void WriteUInt16(byte[] destination, int offset, ushort value)
     {
         destination[offset] = (byte)(value >> 8);
         destination[offset + 1] = (byte)value;
     }
 
+    // 16비트 빅 엔디언 정수 복원
     private static ushort ReadUInt16(byte[] datagram, int offset)
     {
         return (ushort)((datagram[offset] << 8) | datagram[offset + 1]);
     }
 
+    // 32비트 부호 없는 정수의 빅 엔디언 기록
     private static void WriteUInt32(byte[] destination, int offset, uint value)
     {
         destination[offset] = (byte)(value >> 24);
@@ -274,6 +292,7 @@ public static class LanDiscoveryProtocol
         destination[offset + 3] = (byte)value;
     }
 
+    // 32비트 빅 엔디언 정수 복원
     private static uint ReadUInt32(byte[] datagram, int offset)
     {
         return ((uint)datagram[offset] << 24) |
@@ -282,6 +301,7 @@ public static class LanDiscoveryProtocol
                datagram[offset + 3];
     }
 
+    // 64비트 요청 난수의 빅 엔디언 기록
     private static void WriteUInt64(byte[] destination, int offset, ulong value)
     {
         for (int index = 7; index >= 0; index--)
@@ -291,6 +311,7 @@ public static class LanDiscoveryProtocol
         }
     }
 
+    // 64비트 빅 엔디언 요청 난수 복원
     private static ulong ReadUInt64(byte[] datagram, int offset)
     {
         ulong value = 0;

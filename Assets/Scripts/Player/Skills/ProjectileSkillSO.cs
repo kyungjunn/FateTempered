@@ -18,6 +18,7 @@ public sealed class ProjectileSkillSO : PlayerSkillSO
     // 발사체 생성
     public override bool Cast(PlayerSkillController owner, PlayerDamageType damageType)
     {
+        // 서버·오프라인만 투사체 생성.
         if (owner == null || projectilePrefab == null || owner.SkillOrigin == null || owner.DamageDealer == null ||
             !NetworkAuthority.CanSimulate(owner.gameObject))
             return false;

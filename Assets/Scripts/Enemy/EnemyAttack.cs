@@ -36,6 +36,7 @@ public class EnemyAttack : MonoBehaviour
     // 공격 가능 상태일 때 공격 애니메이션을 재생하고 피해 적용을 예약
     public virtual bool TryAttack(Transform target)
     {
+        // 서버·오프라인 공격 개시 권한
         if (!NetworkAuthority.CanSimulate(gameObject) || target == null || Time.time < nextAttackTime)
         {
             return false;

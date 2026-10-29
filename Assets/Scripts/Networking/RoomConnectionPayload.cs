@@ -1,16 +1,19 @@
 using System;
 using System.Text;
 
-// The NGO connection approval envelope is deliberately small and contains no champion or prefab data.
+// NGO 접속 승인용 최소 봉투 — 챔피언·프리팹 정보 제외, 인증 수단 아님
 public static class RoomConnectionPayload
 {
+    // 패킷: 버전 1바이트 + 방 GUID 16바이트 + 이름 길이 1바이트 + UTF-8 이름
     public const byte ProtocolVersion = 1;
     public const int MaximumNameBytes = 64;
     public const int HeaderLength = 18;
     public const int MaximumPayloadBytes = HeaderLength + MaximumNameBytes;
 
+    // 잘못된 유니코드의 대체 문자 변환 금지
     private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
+    // 방 ID·이름 검증 후 정규형 이름 인코딩
     public static bool TryEncode(Guid roomInstanceId, string displayName, out byte[] payload, out string error)
     {
         payload = null;
@@ -50,6 +53,7 @@ public static class RoomConnectionPayload
         return true;
     }
 
+    // 외부 입력의 버전·정확한 길이·GUID·UTF-8·이름 정규형 검증
     public static bool TryDecode(byte[] payload, out Guid roomInstanceId, out string displayName, out string error)
     {
         roomInstanceId = Guid.Empty;
@@ -106,6 +110,7 @@ public static class RoomConnectionPayload
         return true;
     }
 
+    // .NET GUID 앞 세 필드의 네트워크 바이트 순서 변환
     private static void WriteGuidNetworkOrder(byte[] guidBytes, byte[] destination, int offset)
     {
         destination[offset] = guidBytes[3];
@@ -119,6 +124,7 @@ public static class RoomConnectionPayload
         Buffer.BlockCopy(guidBytes, 8, destination, offset + 8, 8);
     }
 
+    // 네트워크 GUID의 .NET 바이트 배열 복원
     private static void ReadGuidNetworkOrder(byte[] source, int offset, byte[] guidBytes)
     {
         guidBytes[0] = source[offset + 3];

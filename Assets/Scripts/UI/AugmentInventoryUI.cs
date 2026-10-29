@@ -19,6 +19,7 @@ public sealed class AugmentInventoryUI : MonoBehaviour
 
     private void OnEnable()
     {
+        // 네트워크 전투: 증강 인벤토리 숨김.
         if (NetworkGameSession.IsNetworkSessionActive)
         {
             gameObject.SetActive(false);

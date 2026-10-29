@@ -6,38 +6,49 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-// Observes server-owned effects. Replicas contain rendering only, never skill execution.
+// 서버 효과 관찰·클라이언트 시각 복제 전용, 스킬 실행 제외
 [RequireComponent(typeof(NetworkObject))]
 public sealed class NetworkSkillPresentation : NetworkBehaviour
 {
+    // 서버·클라이언트 공통 순서의 효과·음향 카탈로그
     [SerializeField] private GameObject[] effectPrefabs = Array.Empty<GameObject>();
     [SerializeField] private AudioClip[] soundClips = Array.Empty<AudioClip>();
+    // 효과·전송 배열 상한과 서버 관찰 주기
     private const int MaxEffects = 512;
     private const int MaxParticles = 62;
     private const int MaxPoints = 65;
     private const int MaxVolumes = 32;
     private const float SnapshotInterval = 0.05f;
 
+    // 파티클 재생·방출 상태 묶음
     private sealed class ParticleSnapshot
     {
+        // 비트: 방출 1·일시정지 2·정지 4·방출 활성 8·객체 활성 16·반복 32
         public byte Flags;
+        // 재생 시각·시간당 및 거리당 방출 배율
         public float Time;
         public float Rate;
         public float DistanceRate;
     }
 
+    // 피해·시전 로직 없는 효과 전송 상태
     private sealed class EffectSnapshot
     {
+        // 효과 식별자·카탈로그 인덱스, 음수는 선·궤적
         public int Id;
         public int Prefab;
+        // 지속형·소유자 추종·활성 상태
         public bool Continuous;
         public bool FollowsOwner;
         public bool Active;
+        // 추종 시 소유자 상대 좌표, 그 외 월드 좌표
         public Vector3 Position;
         public Quaternion Rotation;
         public Vector3 Scale;
+        // 파티클 상태·볼륨 활성값
         public readonly List<ParticleSnapshot> Particles = new List<ParticleSnapshot>();
         public readonly List<byte> Volumes = new List<byte>();
+        // 선·궤적 표시 속성과 정점 목록
         public bool LineEnabled;
         public bool WorldSpace;
         public bool Loop;
@@ -48,6 +59,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         public readonly List<Vector3> Points = new List<Vector3>();
     }
 
+    // 서버 관찰 원본·렌더러 참조·최근 캡처
     private sealed class Observed
     {
         public GameObject Object;
@@ -58,6 +70,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         public EffectSnapshot State;
     }
 
+    // 클라이언트 렌더링 전용 객체·해제 대상 재질
     private sealed class Replica
     {
         public GameObject Object;
@@ -67,14 +80,18 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         public Material Material;
     }
 
+    // 서버 관찰 목록·클라이언트 복제 목록·제거 작업 버퍼
     private readonly Dictionary<int, Observed> observed = new Dictionary<int, Observed>();
     private readonly Dictionary<int, Replica> replicas = new Dictionary<int, Replica>();
     private readonly List<int> removed = new List<int>();
+    // 비활성 생성 공간·효과 ID·다음 관찰 시각
     private GameObject staging;
     private int nextId;
     private float nextSnapshot;
+    // 현재 클라이언트 복제 객체 수
     public int ActiveReplicaCount => replicas.Count;
 
+    // 관찰 목록·복제 객체·생성 공간 정리
     public override void OnNetworkDespawn()
     {
         foreach (Replica replica in replicas.Values) DestroyReplica(replica);
@@ -84,9 +101,11 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         staging = null;
     }
 
+    // 소유자 상위 계층의 연출 동기화 구성 탐색
     private static NetworkSkillPresentation Find(GameObject owner) =>
         owner != null ? owner.GetComponentInParent<NetworkSkillPresentation>() : null;
 
+    // 서버 프리팹 효과 등록·공통 카탈로그 검증
     public static void Track(GameObject owner, GameObject instance, GameObject prefab,
         bool continuous, bool followsOwner = false)
     {
@@ -99,6 +118,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         presentation.Add(instance, null, index, continuous, followsOwner);
     }
 
+    // 서버 선 렌더러 관찰 등록
     public static void TrackLine(GameObject owner, LineRenderer line)
     {
         NetworkSkillPresentation presentation = Find(owner);
@@ -106,6 +126,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         presentation.Add(line.gameObject, line, -1, false, false);
     }
 
+    // 서버 궤적 렌더러 관찰 등록
     public static void TrackTrail(GameObject owner, TrailRenderer trail)
     {
         var presentation = Find(owner);
@@ -113,6 +134,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         presentation.Add(trail.gameObject, null, -1, false, false, trail);
     }
 
+    // 중복 등록·구성 개수 검증 후 초기 상태 전송
     private void Add(GameObject instance, LineRenderer line, int prefab, bool continuous, bool followsOwner,
         TrailRenderer trail = null)
     {
@@ -136,6 +158,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         SendSnapshot(entryToAdd.State, true);
     }
 
+    // 서버 주기적 캡처·전송·소멸 효과 제거 통지
     private void Update()
     {
         if (!IsSpawned || !IsServer || Time.unscaledTime < nextSnapshot) return;
@@ -159,6 +182,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         }
     }
 
+    // 원본 좌표·파티클·볼륨·선 표시 상태 캡처
     private void Capture(Observed entry)
     {
         EffectSnapshot state = entry.State;
@@ -214,6 +238,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         }
         if (entry.Trail != null)
         {
+            // 전송 정점 상한 내 궤적 균등 표본화
             var trail = entry.Trail;
             state.LineEnabled = trail.enabled;
             state.WorldSpace = true;
@@ -231,8 +256,10 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         }
     }
 
+    // 상대 크기 계산용 영분모 방지
     private static float Divide(float value, float divisor) => Mathf.Abs(divisor) > 0.00001f ? value / divisor : 0f;
 
+    // 서버 효과 상태의 RPC 인자 배열 구성·전송
     private void SendSnapshot(EffectSnapshot state, bool created)
     {
         var particles = new ParticleSnapshot[state.Particles.Count];
@@ -244,6 +271,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
             state.StartWidth, state.EndWidth, state.StartColor, state.EndColor, state.Points.ToArray());
     }
 
+    // 파티클 상태 비트 전송 배열
     private static byte[] EncodeFlags(ParticleSnapshot[] particles)
     {
         var values = new byte[particles.Length];
@@ -251,6 +279,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         return values;
     }
 
+    // 파티클 재생 시각 전송 배열
     private static float[] EncodeTimes(ParticleSnapshot[] particles)
     {
         var values = new float[particles.Length];
@@ -258,6 +287,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         return values;
     }
 
+    // 시간당 방출 배율 전송 배열
     private static float[] EncodeRates(ParticleSnapshot[] particles)
     {
         var values = new float[particles.Length];
@@ -265,6 +295,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         return values;
     }
 
+    // 거리당 방출 배율 전송 배열
     private static float[] EncodeDistanceRates(ParticleSnapshot[] particles)
     {
         var values = new float[particles.Length];
@@ -272,6 +303,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         return values;
     }
 
+    // 서버 → 비서버 효과 상태·배열 길이 및 상한 검증
     [Rpc(SendTo.NotServer, InvokePermission = RpcInvokePermission.Server)]
     private void ApplySnapshotRpc(int id, int prefab, bool continuous, bool followsOwner, bool active,
         Vector3 position, Quaternion rotation, Vector3 scale, bool created,
@@ -318,6 +350,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         ApplyState(state, created);
     }
 
+    // 서버 → 비서버 효과 제거 통지
     [Rpc(SendTo.NotServer, InvokePermission = RpcInvokePermission.Server)]
     private void RemoveSnapshotRpc(int id)
     {
@@ -327,6 +360,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         replicas.Remove(id);
     }
 
+    // 복제 개수 상한 검증·필요 시 생성 후 표시 반영
     private void ApplyState(EffectSnapshot state, bool created)
     {
         bool exists = replicas.TryGetValue(state.Id, out Replica replica);
@@ -341,6 +375,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         Apply(replica, state, created);
     }
 
+    // 카탈로그 검증·물리와 게임 로직 없는 시각 복제본 생성
     private Replica CreateReplica(EffectSnapshot state)
     {
         if (staging == null)
@@ -367,6 +402,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
                 throw new InvalidOperationException("Client skill effect catalog does not match server.");
             instance = Instantiate(effectPrefabs[state.Prefab], staging.transform);
             instance.SetActive(false);
+            // 복제본의 충돌·힘·스킬 실행 차단
             foreach (Collider collider in instance.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
             foreach (Collider2D collider in instance.GetComponentsInChildren<Collider2D>(true)) collider.enabled = false;
             foreach (Rigidbody body in instance.GetComponentsInChildren<Rigidbody>(true))
@@ -386,6 +422,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
             }
             foreach (NetworkObject networkObject in instance.GetComponentsInChildren<NetworkObject>(true))
                 DestroyImmediate(networkObject);
+            // 음향은 별도 RPC 경로로만 재생
             foreach (AudioSource audioSource in instance.GetComponentsInChildren<AudioSource>(true))
             { audioSource.playOnAwake = false; audioSource.Stop(); audioSource.enabled = false; }
         }
@@ -406,6 +443,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         return replica;
     }
 
+    // 복제 좌표·파티클 재생·볼륨·선 표시 반영
     private void Apply(Replica replica, EffectSnapshot state, bool created)
     {
         Transform effect = replica.Object.transform;
@@ -464,12 +502,14 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         }
     }
 
+    // 복제 객체와 전용 재질 해제
     private static void DestroyReplica(Replica replica)
     {
         if (replica.Object != null) Destroy(replica.Object);
         if (replica.Material != null) Destroy(replica.Material);
     }
 
+    // 서버 음향 전파·비네트워크 로컬 재생·카탈로그 검증
     public static void PlaySound(GameObject owner, AudioClip clip)
     {
         if (owner == null || clip == null) return;
@@ -482,6 +522,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         presentation.SoundRpc(index, owner.transform.position);
     }
 
+    // 서버 발신 경로 → 클라이언트·호스트 음향 재생, 수신 카탈로그 검증
     [Rpc(SendTo.ClientsAndHost)]
     private void SoundRpc(int index, Vector3 position)
     {
@@ -490,6 +531,7 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         AudioSource.PlayClipAtPoint(soundClips[index], position);
     }
 
+    // 유효한 양수 강도 검증·서버 소유자 흔들림 요청
     public static void Shake(GameObject owner, float strength)
     {
         if (owner == null || float.IsNaN(strength) || float.IsInfinity(strength) || strength <= 0f) return;
@@ -498,9 +540,11 @@ public sealed class NetworkSkillPresentation : NetworkBehaviour
         if (presentation.IsServer) presentation.ShakeRpc(strength);
     }
 
+    // 서버 발신 경로 → 소유자 전용 카메라 연출
     [Rpc(SendTo.Owner)]
     private void ShakeRpc(float strength) => ShakeLocal(gameObject, strength);
 
+    // 로컬 카메라 임펄스 재생·게임 상태 변경 없음
     private static void ShakeLocal(GameObject owner, float strength)
     {
         CinemachineImpulseSource source = owner.GetComponentInChildren<CinemachineImpulseSource>(true);

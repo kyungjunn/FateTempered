@@ -71,6 +71,7 @@ public sealed class CombatHudUI : MonoBehaviour
     {
         // 결과 화면에서는 Tab이 능력치 패널을 다시 열지 않도록 닫아 둔다.
         NetworkGameSession session = NetworkGameSession.Instance;
+        // 네트워크 종료 또는 결과 데이터 있으면 능력치 패널 잠금.
         bool matchEnded = (session != null && session.State == NetworkGameSessionState.Ended) ||
                           GameResult.Data.HasValue;
         if (matchEnded)

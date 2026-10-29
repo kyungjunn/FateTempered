@@ -15,6 +15,7 @@ public sealed class NinjaDashSkillSO : PlayerSkillSO
     public override bool Cast(PlayerSkillController owner, PlayerDamageType damageType)
     {
         // 피해 계산에 필요한 참조 확인 후 돌진 코루틴 시작.
+        // 서버·오프라인만 시전.
         if (owner == null || owner.DamageDealer == null || owner.Stats == null || owner.IsPlayerDead ||
             !NetworkAuthority.CanSimulate(owner.gameObject))
             return false;

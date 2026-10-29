@@ -75,6 +75,7 @@ public sealed class WizardSkillSO : PlayerSkillSO
 
     public override bool Cast(PlayerSkillController owner, PlayerDamageType damageType)
     {
+        // 서버·오프라인만 시전.
         if (owner == null || !NetworkAuthority.CanSimulate(owner.gameObject) || owner.DamageDealer == null)
             return false;
 

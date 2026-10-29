@@ -29,6 +29,7 @@ public class GameEndHandler : MonoBehaviour
     private void BindPlayer(GameObject player)
     {
         // 오프라인 정리가 마지막 사망 알림보다 먼저 올 수 있으므로 다음 바인딩까지 유지한다.
+        // 네트워크: 로컬 사망 결과 경로 사용 안 함.
         if (player == null && !NetworkGameSession.IsNetworkSessionActive) return;
         UnbindPlayer();
         if (player == null || ended || NetworkGameSession.IsNetworkSessionActive) return;
@@ -44,6 +45,7 @@ public class GameEndHandler : MonoBehaviour
 
     private void HandleDead()
     {
+        // 네트워크 판 종료는 세션이 결과 기록.
         if (ended || NetworkGameSession.IsNetworkSessionActive) return;
         ended = true;
 

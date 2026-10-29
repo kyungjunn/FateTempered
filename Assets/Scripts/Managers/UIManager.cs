@@ -61,6 +61,7 @@ public class UIManager : MonoBehaviour
 
     public void RequestAugmentChoice()
     {
+        // 네트워크 증강 선택의 오프라인 티켓 큐 진입 차단
         if (NetworkGameSession.IsNetworkSessionActive) return;
         // 비활성 세션: 티켓 거부
         if (GameManager.Instance == null || !GameManager.Instance.IsActiveSession) return;
@@ -161,6 +162,7 @@ public class UIManager : MonoBehaviour
         }
     }
 
+    // 일시정지형 증강 패널의 오프라인 세션 한정
     private static bool HasActiveSession()
     {
         return !NetworkGameSession.IsNetworkSessionActive

@@ -16,6 +16,7 @@ public class PlayerController : MonoBehaviour
     private bool basicAttackActive;
     private bool attackSpeedSubscribed;
     private float appliedAttackSpeed = float.NaN;
+    // 소유자 입력 전송 및 서버 이동 상태 조회
     private NetworkPlayerMotor motor;
     private PlayerLook look;
 
@@ -44,6 +45,7 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        // 네트워크 생성 이후 입력 전송 경로; 미생성 시 오프라인 직접 처리 경로
         if (motor != null && motor.IsSpawned)
         {
             UpdateNetworkInput();
@@ -115,6 +117,7 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    // 소유자 전용 이동·점프·공격 요청; 정지·사망 시 이동 입력 중립화
     private void UpdateNetworkInput()
     {
         if (!motor.IsOwner || input == null) return;
@@ -125,7 +128,7 @@ public class PlayerController : MonoBehaviour
         if (!blocked && input.AttackTriggered &&
             (skillTargeting == null || !skillTargeting.ShouldSuppressBasicAttack))
         {
-            // NetworkPlayerCombat owns acceptance and presentation, including on the host.
+            // 호스트 포함 공격 승인·연출 담당: NetworkPlayerCombat
             playerAttack?.TryAttack();
         }
         input.JumpTriggered = false;
@@ -160,7 +163,7 @@ public class PlayerController : MonoBehaviour
         if (look == null) look = GetComponent<PlayerLook>();
     }
 
-    // Called once after authoritative acceptance; also initializes a disabled replica before Start.
+    // 권한 측 공격 승인 후 1회 연출; Start 이전 비활성 복제본 참조 초기화 포함
     public void PresentAcceptedBasicAttack()
     {
         InitializeReferences();
@@ -169,6 +172,7 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
+        // 서버·오프라인 공격 상태·애니메이션 구동; 복제본은 동기화 수신
         if (NetworkAuthority.CanSimulate(gameObject))
         {
             UpdateAttackAnimationSpeed();
@@ -181,6 +185,7 @@ public class PlayerController : MonoBehaviour
                 anim.SetTrigger("Attack");
         }
 
+        // 권한 객체·복제본 공통 공격음
         if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayPlayerAttack();
@@ -211,6 +216,7 @@ public class PlayerController : MonoBehaviour
 
     private void UpdateAttackAnimationSpeed()
     {
+        // 서버·오프라인 애니메이션 속도 결정; 클라이언트 복제본 재계산 금지
         if (!NetworkAuthority.CanSimulate(gameObject)) return;
         if (anim == null)
         {
@@ -258,6 +264,7 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    // 서버·오프라인 공격 종료 전환; 네트워크 이동 입력은 서버 모터 상태 기준
     public void EndAttackState()
     {
         if (!NetworkAuthority.CanSimulate(gameObject)) return;

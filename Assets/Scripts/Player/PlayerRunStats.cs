@@ -32,6 +32,7 @@ public sealed class PlayerRunStats : MonoBehaviour
 
     private void Update()
     {
+        // 서버·오프라인만 생존 시간 누적.
         if (!NetworkAuthority.CanSimulate(gameObject) || health.IsDead) return;
         GameManager session = GameManager.Instance;
         if (session == null || !session.IsActiveSession || session.IsPaused) return;
@@ -41,6 +42,7 @@ public sealed class PlayerRunStats : MonoBehaviour
     // EnemyHealth가 마지막 타격자에게 한 번 호출한다.
     public void AddKill()
     {
+        // 서버·오프라인만 처치 수 누적.
         if (NetworkAuthority.CanSimulate(gameObject)) Kills++;
     }
 

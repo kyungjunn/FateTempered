@@ -14,8 +14,10 @@ public class EnemyHealth : MonoBehaviour, IDamageable
     [SerializeField] private int expReward = 1000;
     [SerializeField] private float destroyDelay = 2f;
 
+    // 클라이언트 복제 체력 수신 여부·최대 체력
     private bool hasReplicatedHealthSnapshot;
     private int replicatedMaxHealth;
+    // 서버 생성 전 협동 난이도 배율
     private float healthMultiplier = 1f;
 
     public int MaxHealth => hasReplicatedHealthSnapshot
@@ -34,6 +36,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
     private bool deathHandled;
     private EnemyAggro aggro;
 
+    // 서버·오프라인 피격 기여자 기록
     public void RecordDamageSource(PlayerDamageDealer source)
     {
         if (NetworkAuthority.CanSimulate(gameObject) && aggro != null) aggro.RecordHit(source);
@@ -66,6 +69,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
     // 플레이어 공격 등 외부 피해를 받을 때 호출
     public void TakeDamage(int damage)
     {
+        // 서버·오프라인 피해 확정 권한
         if (!NetworkAuthority.CanSimulate(gameObject) || IsDead || damage <= 0)
         {
             return;
@@ -89,8 +93,10 @@ public class EnemyHealth : MonoBehaviour, IDamageable
         enemyAnimator?.PlayHit();
     }
 
+    // 클라이언트 체력 스냅샷·사망 연출 반영
     public void ApplyReplicatedHealth(int currentHealth, int maxHealth)
     {
+        // 권한 보유 원본의 복제값 덮어쓰기 방지
         if (NetworkAuthority.CanSimulate(gameObject))
         {
             return;
@@ -133,6 +139,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
         ScheduleDestruction();
     }
 
+    // 서버·클라이언트 공통 사망 연출
     private void ApplyDeathPresentation()
     {
         enemyAnimator?.PlayDeath();
@@ -153,6 +160,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
         }
     }
 
+    // 네트워크 지연 디스폰·오프라인 지연 제거 분기
     private void ScheduleDestruction()
     {
         NetworkObject networkObject = GetComponent<NetworkObject>();
@@ -165,6 +173,7 @@ public class EnemyHealth : MonoBehaviour, IDamageable
         Destroy(gameObject, destroyDelay);
     }
 
+    // 서버 전용 복제 객체 제거
     private void DespawnNetworkObject()
     {
         NetworkObject networkObject = GetComponent<NetworkObject>();

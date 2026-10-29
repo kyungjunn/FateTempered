@@ -37,6 +37,7 @@ public class PlayerMovement : MonoBehaviour
         //Move();
     }
 
+    // 오프라인 카메라 기준 이동 경로; 클라이언트 복제본 시뮬레이션 금지
     public void Move(Vector2 input)
     {
         if (!NetworkAuthority.CanSimulate(gameObject)) return;
@@ -60,7 +61,7 @@ public class PlayerMovement : MonoBehaviour
         transform.Translate(move * MoveSpeed * Time.deltaTime, Space.World);
     }
 
-    // Network simulation uses server stats and server time, never a client camera transform.
+    // 서버 권한 이동: 서버 능력치·시간 및 전달된 회전각 기준, 클라이언트 카메라 미사용
     public void MoveAuthoritative(Vector2 input, float yaw, float deltaTime)
     {
         if (!NetworkAuthority.CanSimulate(gameObject)) return;
@@ -69,6 +70,7 @@ public class PlayerMovement : MonoBehaviour
         rb.MovePosition(rb.position + direction.normalized * MoveSpeed * deltaTime);
     }
 
+    // 서버·오프라인 전용 접지 판정 및 점프 물리 적용
     public bool Jump()
     {
         if (!NetworkAuthority.CanSimulate(gameObject)) return false;

@@ -40,6 +40,7 @@ public sealed class SwordDashSkillSO : PlayerSkillSO
 
     public override bool Cast(PlayerSkillController owner, PlayerDamageType damageType)
     {
+        // 서버·오프라인만 시전.
         if (owner == null || !NetworkAuthority.CanSimulate(owner.gameObject) ||
             !owner.isActiveAndEnabled || owner.IsPlayerDead ||
             owner.DamageDealer == null)

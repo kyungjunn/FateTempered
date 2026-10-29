@@ -4,9 +4,10 @@ using Unity.Netcode.Components;
 using UnityEditor;
 using UnityEngine;
 
-// 적 프리팹을 서버 권위 네트워크 적으로 구성하고 런타임 NGO 프리팹 목록에 등록한다.
+// 에디터 도구: 서버 권위 적 구성·런타임 NGO 프리팹 등록
 public static class NetworkEnemySetup
 {
+    // 네트워크 전투용 적 프리팹 경로
     public static readonly string[] EnemyPaths =
     {
         "Assets/Prefabs/Enemy/SkeletonEnemy.prefab",
@@ -18,9 +19,11 @@ public static class NetworkEnemySetup
         "Assets/Prefabs/Enemy/LevelOne/SlimeEnemy.prefab",
     };
 
+    // 박쥐 음파·성장 동기화 대상 공용 플레이어
     public const string BatProjectilePath = "Assets/Prefabs/Enemy/LevelOne/BatSonicWave.prefab";
     public const string PlayerBasePath = "Assets/Prefabs/Player/BasePlayer.prefab";
 
+    // 적·투사체·플레이어 구성 일괄 저장
     [MenuItem("Tools/Networking/Configure Network Enemies")]
     public static void Configure()
     {
@@ -34,6 +37,7 @@ public static class NetworkEnemySetup
         Debug.Log("NETWORK_ENEMY_SETUP_DONE");
     }
 
+    // 공용 스폰 허용 목록에 적·음파 등록
     public static void RegisterAll()
     {
         var registry = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>(NetworkCombatSetup.RegistryPath);
@@ -43,6 +47,7 @@ public static class NetworkEnemySetup
         EditorUtility.SetDirty(registry);
     }
 
+    // 프리팹 존재 검사·중복 등록 방지
     private static void Register(NetworkPrefabsList registry, string path)
     {
         var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
@@ -52,6 +57,7 @@ public static class NetworkEnemySetup
         registry.Add(new NetworkPrefab { Prefab = prefab });
     }
 
+    // 적 구성: 서버 위치·애니메이션·체력·AI 권한·어그로
     private static void ConfigureEnemy(string path)
     {
         GameObject root = PrefabUtility.LoadPrefabContents(path);
@@ -62,6 +68,7 @@ public static class NetworkEnemySetup
             sync.AuthorityMode = NetworkTransform.AuthorityModes.Server;
             sync.Interpolate = true;
             sync.SyncScaleX = sync.SyncScaleY = sync.SyncScaleZ = false;
+            // 수평 회전만 동기화; 크기·기울기 제외
             sync.SyncRotAngleX = sync.SyncRotAngleZ = false;
 
             Animator animator = root.GetComponentInChildren<Animator>(true);
@@ -84,6 +91,7 @@ public static class NetworkEnemySetup
         }
     }
 
+    // 음파 구성: 서버 위치 복제·클라이언트 보간
     private static void ConfigureProjectile(string path)
     {
         GameObject root = PrefabUtility.LoadPrefabContents(path);
@@ -102,6 +110,7 @@ public static class NetworkEnemySetup
         }
     }
 
+    // 공용 플레이어: 레벨 시스템 필수·성장 데이터 동기화
     private static void ConfigurePlayer()
     {
         GameObject root = PrefabUtility.LoadPrefabContents(PlayerBasePath);
@@ -118,6 +127,7 @@ public static class NetworkEnemySetup
         }
     }
 
+    // 기존 컴포넌트 재사용·누락 시 추가
     private static T GetOrAdd<T>(GameObject root) where T : Component
     {
         T component = root.GetComponent<T>();

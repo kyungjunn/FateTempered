@@ -50,6 +50,7 @@ public class PlayerAugments : MonoBehaviour
     // 획득 또는 중첩
     public SkillAcquireStatus TryAcquireLoadedSkill(SkillAugmentSO so, GameObject prefab)
     {
+        // 네트워크 전투: 스킬 증강 획득 금지.
         if (NetworkGameSession.IsNetworkSessionActive) return SkillAcquireStatus.Invalid;
         // 데이터 검사
         if (so == null)
@@ -145,6 +146,7 @@ public class PlayerAugments : MonoBehaviour
     {
         removed = null;
 
+        // 네트워크 전투: 스킬 중첩 제거 금지.
         if (NetworkGameSession.IsNetworkSessionActive || ownedSkills.Count == 0)
         {
             return false;

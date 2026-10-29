@@ -20,12 +20,14 @@ public class GameManager : MonoBehaviour
     private AsyncOperation pendingMapLoad;
     private UIManager startupUIManager;
     private bool startupCancelled;
+    // 네트워크 전투 구분·종료 중 오프라인 동작 차단
     private bool networkCombatMode;
     private bool offlineNavigationInProgress;
 
     public int SessionId { get; private set; }
     public GameObject CurrentPlayer => currentPlayer;
     public bool IsActiveSession => Instance == this && SessionId != 0;
+    // 네트워크 세션 토큰·맵 로드 완료 조건
     public bool IsNetworkCombatActive => networkCombatMode && IsActiveSession &&
         mapScene.IsValid() && mapScene.isLoaded;
 
@@ -74,6 +76,7 @@ public class GameManager : MonoBehaviour
     private void Start()
     {
         if (Instance != this || startupCancelled) return;
+        // 네트워크 전용 로딩 대기·로컬 맵 생성 제외
         if (NetworkGameSession.IsNetworkSessionActive)
         {
             networkCombatMode = true;
@@ -149,6 +152,7 @@ public class GameManager : MonoBehaviour
         finally
         {
             SetCurrentPlayer(null);
+            // 네트워크 종료 경로의 전역 시간 배율 변경 제외
             bool offlineSession = !NetworkGameSession.IsNetworkSessionActive && !networkCombatMode;
             if (!NetworkGameSession.IsNetworkSessionActive)
                 networkCombatMode = false;
@@ -183,6 +187,7 @@ public class GameManager : MonoBehaviour
         PlayerController controller = player.GetComponent<PlayerController>();
         if (controller != null) controller.enabled = false;
 
+        // 물리 시뮬레이션 권한 보유 객체만 정지
         if (NetworkAuthority.CanSimulate(player) && player.TryGetComponent(out Rigidbody body))
             body.linearVelocity = Vector3.zero;
     }
@@ -205,6 +210,7 @@ public class GameManager : MonoBehaviour
 
     private void NavigateFromOfflineResult(string sceneName)
     {
+        // 네트워크 결과의 단독 씬 이동 제외
         if (Instance != this || !isActiveAndEnabled || NetworkGameSession.IsNetworkSessionActive ||
             networkCombatMode || SessionId != 0 || !GameResult.Data.HasValue || offlineNavigationInProgress)
         {
@@ -252,6 +258,7 @@ public class GameManager : MonoBehaviour
             yield return null;
     }
 
+    // 로컬 전투 대상 등록·네트워크 소유권 확인
     public bool RegisterLocalPlayer(GameObject player)
     {
         if (!IsActiveSession || player == null)
@@ -259,6 +266,7 @@ public class GameManager : MonoBehaviour
 
         if (NetworkGameSession.IsNetworkSessionActive)
         {
+            // 스폰 완료된 자기 소유 PlayerObject만 허용
             NetworkObject networkObject = player.GetComponent<NetworkObject>();
             if (!networkCombatMode || networkObject == null || !networkObject.IsSpawned ||
                 !networkObject.IsOwner)
@@ -277,6 +285,7 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
+    // 네트워크 로컬 플레이어 해제·공유 전투 세션 유지
     public void UnregisterLocalPlayer(GameObject player)
     {
         if (ReferenceEquals(player, null) || !ReferenceEquals(currentPlayer, player)) return;
@@ -316,12 +325,14 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // 로드 완료된 네트워크 맵 연결·전투 토큰 발급
     public bool BeginNetworkCombat(Scene map)
     {
         if (Instance != this || !isActiveAndEnabled || !NetworkGameSession.IsNetworkSessionActive ||
             !map.IsValid() || !map.isLoaded || map.name != mapSceneName)
             return false;
 
+        // 동일 맵의 중복 시작 허용·다른 세션 덮어쓰기 차단
         if (networkCombatMode && SessionId != 0)
             return mapScene.handle == map.handle && IsNetworkCombatActive;
         if (SessionId != 0 || currentPlayer != null)
@@ -361,6 +372,7 @@ public class GameManager : MonoBehaviour
                 NetworkGameSession session = NetworkGameSession.Instance;
                 if (session == null || session.State == NetworkGameSessionState.Stopping) yield break;
 
+                // 참가자 준비 진행률·전투 시작·로딩 연출 완료 대기
                 bool running = NetworkGameSession.IsCombatRunning;
                 panel.SetTargetProgress(session.MatchLoadingProgress);
                 if (running && panel.IsLoadingVisualDone) yield break;
@@ -468,6 +480,7 @@ public class GameManager : MonoBehaviour
 
     public void PauseGame()
     {
+        // 네트워크 공용 전투의 로컬 일시정지 제외
         if (NetworkGameSession.IsNetworkSessionActive || networkCombatMode) return;
         IsPaused = true;
         Time.timeScale = 0f;
@@ -476,6 +489,7 @@ public class GameManager : MonoBehaviour
 
     public void ResumeGame()
     {
+        // 네트워크 전투의 전역 시간 배율 변경 제외
         if (NetworkGameSession.IsNetworkSessionActive || networkCombatMode) return;
         IsPaused = false;
         Time.timeScale = 1f;

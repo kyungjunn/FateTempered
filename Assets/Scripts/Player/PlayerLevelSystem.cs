@@ -3,6 +3,7 @@ using System;
 
 public class PlayerLevelSystem : MonoBehaviour
 {
+    // 서버 계산·클라이언트 복제 대상 성장 상태
     public int level = 1;
     public int currentExp = 0;
     public int requiredExp = 100;
@@ -47,6 +48,7 @@ public class PlayerLevelSystem : MonoBehaviour
         Debug.Log($"레벨업! 다음 레벨 요구 경험치: {requiredExp}");
     }
 
+    // 클라이언트 전용 성장 스냅샷 적용 및 변경 알림
     public void ApplyReplicated(int replicatedLevel, int replicatedExp, int replicatedRequiredExp)
     {
         if (NetworkAuthority.CanSimulate(gameObject)) return;

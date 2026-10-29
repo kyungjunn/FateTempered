@@ -4,11 +4,14 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
 
+// 복제 로비 데이터 표시와 로컬 참가자 요청 전달
 public sealed class TeamLobbyUI : MonoBehaviour
 {
+    // 로컬 캐릭터 선택 표시 색상
     private static readonly Color SelectedChampionColor = new Color(0.12f, 0.35f, 0.58f, 1f);
     private static readonly Color UnselectedChampionColor = new Color(0.08f, 0.42f, 0.49f, 1f);
 
+    // 로비·로딩 패널과 참가자·캐릭터·조작 요소 참조
     [SerializeField] private GameObject lobbyPanel;
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private TMP_Text roomTitleText;
@@ -26,10 +29,12 @@ public sealed class TeamLobbyUI : MonoBehaviour
     [SerializeField] private Button startButton;
     [SerializeField] private Button leaveButton;
 
+    // 세션·복제 로비 구독 대상과 공지 표시용 재사용 버퍼
     private NetworkGameSession session;
     private NetworkLobbyState lobby;
     private readonly StringBuilder noticeBuilder = new StringBuilder(256);
 
+    // 버튼·세션 구독과 초기 로비 표시
     private void OnEnable()
     {
         RegisterButtons();
@@ -37,18 +42,21 @@ public sealed class TeamLobbyUI : MonoBehaviour
         Render();
     }
 
+    // 버튼·세션·로비 구독 해제
     private void OnDisable()
     {
         UnregisterButtons();
         UnbindSession();
     }
 
+    // 세션 교체 감지와 로비 화면 갱신
     private void Update()
     {
         EnsureSessionBinding();
         Render();
     }
 
+    // 로비 조작 버튼 구독
     private void RegisterButtons()
     {
         AddListener(swordButton, HandleSelectSword);
@@ -59,6 +67,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         AddListener(leaveButton, HandleLeave);
     }
 
+    // 로비 조작 버튼 구독 해제
     private void UnregisterButtons()
     {
         RemoveListener(swordButton, HandleSelectSword);
@@ -69,18 +78,21 @@ public sealed class TeamLobbyUI : MonoBehaviour
         RemoveListener(leaveButton, HandleLeave);
     }
 
+    // 유효한 버튼의 클릭 처리 등록
     private static void AddListener(Button button, UnityEngine.Events.UnityAction listener)
     {
         if (button != null)
             button.onClick.AddListener(listener);
     }
 
+    // 유효한 버튼의 클릭 처리 제거
     private static void RemoveListener(Button button, UnityEngine.Events.UnityAction listener)
     {
         if (button != null)
             button.onClick.RemoveListener(listener);
     }
 
+    // 현재 세션과 해당 세션의 복제 로비 재연결
     private void EnsureSessionBinding()
     {
         NetworkGameSession currentSession = NetworkGameSession.Instance;
@@ -95,6 +107,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         BindLobby(session != null ? session.Lobby : null);
     }
 
+    // 세션과 종속 로비 구독 해제
     private void UnbindSession()
     {
         if (session != null)
@@ -103,6 +116,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         BindLobby(null);
     }
 
+    // 로비 교체 시 상태·복제 공지 목록 구독 이전
     private void BindLobby(NetworkLobbyState currentLobby)
     {
         if (lobby == currentLobby)
@@ -122,6 +136,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         }
     }
 
+    // 현재 세션의 로비 참조 교체 반영
     private void HandleSessionChanged(NetworkGameSession changedSession)
     {
         if (changedSession != session)
@@ -131,32 +146,38 @@ public sealed class TeamLobbyUI : MonoBehaviour
         Render();
     }
 
+    // 현재 로비 상태 변경의 화면 반영
     private void HandleLobbyChanged(NetworkLobbyState changedLobby)
     {
         if (changedLobby == lobby)
             Render();
     }
 
+    // 복제 공지 목록 변경의 화면 반영
     private void HandleNoticesChanged(NetworkListEvent<NetworkLobbyNotice> changeEvent)
     {
         Render();
     }
 
+    // 검사 캐릭터 선택 요청
     private void HandleSelectSword()
     {
         SelectChampion(PlayerCharacterId.Sword);
     }
 
+    // 닌자 캐릭터 선택 요청
     private void HandleSelectNinja()
     {
         SelectChampion(PlayerCharacterId.Ninja);
     }
 
+    // 마법사 캐릭터 선택 요청
     private void HandleSelectWizard()
     {
         SelectChampion(PlayerCharacterId.Wizard);
     }
 
+    // 선택 가능한 로컬 참가자의 캐릭터 변경 요청 전달
     private void SelectChampion(PlayerCharacterId champion)
     {
         if (session == null || session.State != NetworkGameSessionState.Lobby || !HasSelectableLocalMember())
@@ -165,6 +186,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         session.SelectChampion(champion);
     }
 
+    // 방장이 아닌 로컬 참가자의 복제 준비 상태 반전 요청
     private void HandleReadyToggle()
     {
         if (session == null || session.State != NetworkGameSessionState.Lobby ||
@@ -176,6 +198,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         session.SetReady(!member.Ready);
     }
 
+    // 세션 시작 조건 충족 시 시작 요청
     private void HandleStart()
     {
         if (session == null || !session.CanStart)
@@ -184,6 +207,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         session.RequestStart();
     }
 
+    // 로비·로딩·접속 진행 중 세션 퇴장 요청
     private void HandleLeave()
     {
         if (session == null || (session.State != NetworkGameSessionState.Lobby &&
@@ -194,6 +218,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         session.Leave();
     }
 
+    // 복제 스냅샷 기반 표시와 로컬 참가자 권한별 버튼 구성
     private void Render()
     {
         NetworkLobbySnapshot snapshot = lobby != null ? lobby.Snapshot : default;
@@ -208,6 +233,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
 
         SetPanel(lobbyPanel, lobbyVisible);
         SetPanel(loadingPanel, loadingVisible);
+        // 숨겨진 로비 화면의 게임 화면 가림·입력 차단 방지
         Canvas canvas = GetComponent<Canvas>() ?? GetComponentInParent<Canvas>();
         bool overlayVisible = lobbyVisible || loadingVisible;
         if (canvas != null)
@@ -247,6 +273,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         UpdatePortrait(member1Portrait, snapshot.Member1);
         RenderNotices(snapshot);
 
+        // 복제 데이터 직접 수정 없이 로컬 참가자 상태로 조작 가능 여부 결정
         bool hasLocalMember = TryGetLocalMember(out NetworkLobbyMemberSnapshot localMember);
         bool canChooseChampion = hasLocalMember && localMember.Connected && localMember.Synchronized;
         SetButtonVisible(swordButton, true);
@@ -270,6 +297,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         SetInteractable(leaveButton, true);
     }
 
+    // 로비 비표시 구간의 캐릭터·준비·시작 버튼 초기화
     private void SetLobbyButtons(bool visible, bool hasLocalMember, NetworkLobbyMemberSnapshot member)
     {
         SetChampionButton(swordButton, PlayerCharacterId.Sword, false, false, "Sword");
@@ -284,6 +312,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         SetInteractable(startButton, false);
     }
 
+    // 현재 방 인스턴스에 속한 복제 참가·퇴장 공지만 표시
     private void RenderNotices(NetworkLobbySnapshot snapshot)
     {
         noticeBuilder.Length = 0;
@@ -307,11 +336,13 @@ public sealed class TeamLobbyUI : MonoBehaviour
         SetText(noticeText, noticeBuilder.Length > 0 ? noticeBuilder.ToString() : "최근 기록이 없습니다.");
     }
 
+    // 연결·동기화를 마친 로컬 참가자 확인
     private bool HasSelectableLocalMember()
     {
         return TryGetLocalMember(out NetworkLobbyMemberSnapshot member) && member.Connected && member.Synchronized;
     }
 
+    // 로컬 클라이언트 식별자와 복제 참가자 슬롯의 대응 조회
     private bool TryGetLocalMember(out NetworkLobbyMemberSnapshot member)
     {
         member = default;
@@ -338,6 +369,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         return false;
     }
 
+    // 점유·캐릭터 유효성에 따른 초상화 표시
     private void UpdatePortrait(Image image, NetworkLobbyMemberSnapshot member)
     {
         if (image == null) return;
@@ -347,6 +379,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
         image.enabled = portrait != null;
     }
 
+    // 참가자 역할·캐릭터·준비·연결 상태 문구 구성
     private static string FormatMember(NetworkLobbyMemberSnapshot member, string emptyLabel)
     {
         if (!member.Occupied)
@@ -362,11 +395,13 @@ public sealed class TeamLobbyUI : MonoBehaviour
         return role + " · " + member.DisplayName + "\n" + champion + " · " + readiness + " · " + connection;
     }
 
+    // 지원 캐릭터 식별자 범위 확인
     private static bool IsValidChampion(int champion)
     {
         return champion >= (int)PlayerCharacterId.Sword && champion <= (int)PlayerCharacterId.Wizard;
     }
 
+    // 캐릭터 버튼의 선택 문구·조작 가능 상태·색상 적용
     private static void SetChampionButton(Button button, PlayerCharacterId champion, bool interactable,
         bool selected, string label)
     {
@@ -386,6 +421,7 @@ public sealed class TeamLobbyUI : MonoBehaviour
             button.targetGraphic.color = selected ? SelectedChampionColor : UnselectedChampionColor;
     }
 
+    // 버튼 하위 문구 갱신
     private static void SetButtonLabel(Button button, string label)
     {
         if (button == null)
@@ -395,29 +431,34 @@ public sealed class TeamLobbyUI : MonoBehaviour
         SetText(text, label);
     }
 
+    // 패널 표시 상태 적용
     private static void SetPanel(GameObject panel, bool visible)
     {
         SetActiveIfChanged(panel, visible);
     }
 
+    // 버튼 오브젝트 표시 상태 적용
     private static void SetButtonVisible(Button button, bool visible)
     {
         if (button != null)
             SetActiveIfChanged(button.gameObject, visible);
     }
 
+    // 버튼 조작 가능 상태 적용
     private static void SetInteractable(Button button, bool interactable)
     {
         if (button != null)
             button.interactable = interactable;
     }
 
+    // 활성 상태 변경 시에만 오브젝트 전환
     private static void SetActiveIfChanged(GameObject target, bool active)
     {
         if (target != null && target.activeSelf != active)
             target.SetActive(active);
     }
 
+    // 서식 태그 해석 없는 문구 표시
     private static void SetText(TMP_Text label, string value)
     {
         if (label == null)

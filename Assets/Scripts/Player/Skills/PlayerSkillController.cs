@@ -101,6 +101,7 @@ public sealed class PlayerSkillController : MonoBehaviour
     private Coroutine skillEWeaponRoutine;
     private NinjaUltimate ninjaUltimate;
     private readonly List<ActiveSkillRoutine> activeSkillRoutines = new List<ActiveSkillRoutine>();
+    // 스폰 완료 네트워크 스킬 상태·요청 처리 연결
     private NetworkPlayerSkills networkSkills;
     private NetworkPlayerSkills NetworkSkills
     {
@@ -110,7 +111,9 @@ public sealed class PlayerSkillController : MonoBehaviour
             return networkSkills != null && networkSkills.IsSpawned ? networkSkills : null;
         }
     }
+    // 비서버 클라이언트의 HUD·시전 상태용 서버 복제본
     private NetworkPlayerSkills Replica => NetworkSkills != null && !NetworkSkills.IsServer ? NetworkSkills : null;
+    // 서버 복제 스냅샷용 Q·E 재사용 시각과 기본 공격 차단 상태
     internal float QReadyTime => qReadyTime;
     internal float EReadyTime => ePendingRechargeCharges > 0 ? eNextRechargeTime : 0f;
     internal bool BlocksNetworkBasicAttack => IsSessionEnded || IsSkillCasting();
@@ -168,6 +171,7 @@ public sealed class PlayerSkillController : MonoBehaviour
 
     private void Update()
     {
+        // 클라이언트 복제본의 쿨타임·스킬 상태 독립 갱신 차단
         if (Replica != null) return;
         // 채널링 중 사망하면 대기 중인 쿨타임을 시작.
         if (deferredCooldownSkill != null &&
@@ -198,6 +202,7 @@ public sealed class PlayerSkillController : MonoBehaviour
             playerAugments.onSkillsChanged -= HandlePlayerSkillsChanged;
     }
 
+    // 디스폰·경기 종료 후 추가 시전 차단 및 진행 스킬 취소
     public void EndSession()
     {
         if (IsSessionEnded)
@@ -247,6 +252,7 @@ public sealed class PlayerSkillController : MonoBehaviour
 
     internal bool CanBeginSkillTargeting => CanCast() && !IsSkillCasting();
 
+    // 네트워크 경로 제외 로컬 시전: 시뮬레이션 권한 필수
     internal bool TryCastLocalSkill(NetworkSkillSlot slot)
     {
         if (NetworkSkills != null || !NetworkAuthority.CanSimulate(gameObject) || !CanCast() || IsSkillCasting())
@@ -267,6 +273,7 @@ public sealed class PlayerSkillController : MonoBehaviour
 
     private bool TryUseUltimateAuthoritative()
     {
+        // 서버 또는 오프라인 시뮬레이션의 궁극기 실행·게이지 소모
         if (!NetworkAuthority.CanSimulate(gameObject)) return false;
         // 일시정지·사망·다른 스킬 시전 중이면 사용 차단.
         if (!CanCast() || IsSkillCasting())
@@ -301,6 +308,7 @@ public sealed class PlayerSkillController : MonoBehaviour
     // 쿨다운 확인 후 시전
     private bool TryCast(PlayerSkillSO skill, bool isE)
     {
+        // 클라이언트의 스킬 실행·쿨타임 원본 변경 차단
         if (!NetworkAuthority.CanSimulate(gameObject)) return false;
         // 시전 가능 상태, Q 쿨타임 또는 E 충전 수, 스킬 실행 결과 검사.
         if (!CanCast() || IsSkillCasting() || skill == null ||
@@ -334,6 +342,7 @@ public sealed class PlayerSkillController : MonoBehaviour
         return true;
     }
 
+    // 서버 전용 네트워크 시전: 슬롯·지면 목표 검증 후 권한 실행
     internal bool TryCastNetworkSkill(NetworkSkillSlot slot, Vector3 groundTarget, bool hasGroundTarget)
     {
         if (NetworkSkills == null || !NetworkSkills.IsServer || !CanCast() || IsSkillCasting())
@@ -345,6 +354,7 @@ public sealed class PlayerSkillController : MonoBehaviour
             case NetworkSkillSlot.E:
                 if (skillE is WizardSkillSO resonance && resonance.Kind == WizardSkillKind.ResonanceField)
                 {
+                    // 서버 지면 목표 사전 검증, 시전 실패 시 준비 상태 취소
                     WizardCombat combat = GetComponent<WizardCombat>();
                     if (!hasGroundTarget || ECharges <= 0 || combat == null ||
                         !combat.TryPrepareNetworkResonanceCast(resonance, groundTarget))
@@ -510,6 +520,7 @@ public sealed class PlayerSkillController : MonoBehaviour
 
     private void RefreshEChargeState()
     {
+        // 충전 수·회복 시각 원본 갱신의 서버 시뮬레이션 한정
         if (!NetworkAuthority.CanSimulate(gameObject)) return;
         if (playerAugments == null)
             playerAugments = GetComponent<PlayerAugments>();
@@ -624,6 +635,7 @@ public sealed class PlayerSkillController : MonoBehaviour
     // 스킬 모션 중 중복 시전 차단
     private bool IsSkillCasting()
     {
+        // 클라이언트 중복 시전 차단 판단의 서버 복제 상태 사용
         if (Replica != null) return Replica.BlocksBasicAttack;
         // 이동 잠금·궁극기 돌진·채널링·Q/E/R 모션 중 중복 시전 방지.
         if (movementLocked)

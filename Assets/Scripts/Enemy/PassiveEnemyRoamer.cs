@@ -28,6 +28,7 @@ public sealed class PassiveEnemyRoamer : MonoBehaviour
 
     private void Update()
     {
+        // 서버·오프라인만 배회; 클라이언트 비활성.
         if (!NetworkAuthority.CanSimulate(gameObject))
         {
             enabled = false;

@@ -18,6 +18,7 @@ public sealed class BatSonicProjectile : MonoBehaviour
     private Mesh waveMesh;
     private bool launched;
     private bool finished;
+    // 서버 디스폰 대상 복제 객체
     private NetworkObject networkObject;
 
     private void Awake()
@@ -36,6 +37,7 @@ public sealed class BatSonicProjectile : MonoBehaviour
         renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
     }
 
+    // 서버·오프라인 원본 발사 초기화, 클라이언트 복제본 호출 제외
     public void Launch(Transform source, Vector3 travelDirection, int attackDamage)
     {
         owner = source;
@@ -71,6 +73,7 @@ public sealed class BatSonicProjectile : MonoBehaviour
 
     private void FixedUpdate()
     {
+        // 발사 원본만 이동·충돌 판정, 복제본 실행 제외
         if (!launched) return;
 
         float distance = speed * Time.fixedDeltaTime;
@@ -112,6 +115,7 @@ public sealed class BatSonicProjectile : MonoBehaviour
             || hit.GetComponentInParent<EnemyHealth>() != null;
     }
 
+    // 발사 원본의 플레이어 피해 확정·투사체 제거
     private void Hit(Collider hit)
     {
         launched = false;

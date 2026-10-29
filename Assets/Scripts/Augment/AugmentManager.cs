@@ -79,6 +79,7 @@ public class AugmentManager : MonoBehaviour
     // 플레이어 스냅샷 연결
     private void HandlePlayerSpawned(GameObject playerObject)
     {
+        // 네트워크 전투: 증강 세션 미연결.
         if (NetworkGameSession.IsNetworkSessionActive)
         {
             ClearSession();
@@ -104,6 +105,7 @@ public class AugmentManager : MonoBehaviour
     public List<AugmentSO> GetRandomAugments(IReadOnlyCollection<AugmentSO> keepVisible)
     {
         List<AugmentSO> result = new List<AugmentSO>();
+        // 네트워크 전투: 증강 선택지 없음.
         if (NetworkGameSession.IsNetworkSessionActive) return result;
         AugmentResourceLoader host = AugmentResourceLoader.Instance;
         GameManager session = GameManager.Instance;
@@ -170,6 +172,7 @@ public class AugmentManager : MonoBehaviour
     // 증강 적용
     public IEnumerator ApplyAugmentRoutine(AugmentSO augment, int sessionId, int ticketId, System.Action<AugmentApplyStatus, string> completed)
     {
+        // 네트워크 전투: 증강 적용 미지원.
         if (NetworkGameSession.IsNetworkSessionActive)
         {
             completed?.Invoke(AugmentApplyStatus.Invalid, "증강은 네트워크 전투에서 아직 지원하지 않습니다.");
@@ -284,6 +287,7 @@ public class AugmentManager : MonoBehaviour
     // 무작위 스킬 제거
     public SkillAugmentSO RemoveRandomSkill()
     {
+        // 네트워크 전투: 스킬 제거 미지원.
         if (NetworkGameSession.IsNetworkSessionActive || playerAugments == null)
         {
             return null;
@@ -295,6 +299,7 @@ public class AugmentManager : MonoBehaviour
     // 무작위 스탯 감소
     public StatReduceResult? ReduceRandomStat(float minRatio, float maxRatio)
     {
+        // 네트워크 전투: 스탯 감소 미지원.
         if (NetworkGameSession.IsNetworkSessionActive || playerStats == null)
         {
             return null;

@@ -1191,8 +1191,10 @@ public sealed class NetworkGameSession : MonoBehaviour
                     Destroy(spawned.gameObject);
             }
             spawnedPlayers.Remove(clientId);
-            matchFlow?.Remove(clientId, Time.timeAsDouble);
+            matchFlow?.Remove(clientId, manager.ServerTime.Time);
             if (lobby != null) lobby.RemoveMember(clientId);
+            if (state == NetworkGameSessionState.Running && matchFlow != null && !matchFlow.Ended)
+                PublishReviveSnapshot();
             UpdateHostAdvertisement();
         }
     }
@@ -1358,7 +1360,7 @@ public sealed class NetworkGameSession : MonoBehaviour
     private void StartMatchFlow()
     {
         matchFlow = new MatchFlow(reviveDelay, reviveHealthRatio, reviveInvulnerableSeconds);
-        matchStartedAt = Time.timeAsDouble;
+        matchStartedAt = manager.ServerTime.Time;
         foreach (KeyValuePair<ulong, NetworkObject> pair in spawnedPlayers)
             if (pair.Value != null && pair.Value.TryGetComponent(out PlayerHealth health))
                 matchFlow.Add(pair.Key, health);
@@ -1370,7 +1372,43 @@ public sealed class NetworkGameSession : MonoBehaviour
         if (matchFlow == null || matchFlow.Ended || manager == null || !manager.IsServer ||
             state != NetworkGameSessionState.Running)
             return;
-        matchFlow.Tick(Time.timeAsDouble);
+        matchFlow.Tick(manager.ServerTime.Time);
+        if (!matchFlow.Ended)
+            PublishReviveSnapshot();
+    }
+
+    private void PublishReviveSnapshot()
+    {
+        if (lobby == null || !lobby.IsSpawned || matchFlow == null || matchFlow.Ended || manager == null ||
+            !manager.IsServer || lobby.Snapshot.Phase != NetworkLobbyPhase.Running)
+        {
+            return;
+        }
+
+        NetworkLobbySnapshot current = lobby.Snapshot;
+        if (current.StartRevision != frozenRoster.StartRevision)
+            return;
+
+        ReviveSnapshot revives = new ReviveSnapshot
+        {
+            StartRevision = current.StartRevision,
+            Member0 = BuildReviveSlot(current.Member0),
+            Member1 = BuildReviveSlot(current.Member1)
+        };
+        lobby.PublishRevives(revives);
+    }
+
+    private ReviveSnapshotSlot BuildReviveSlot(NetworkLobbyMemberSnapshot member)
+    {
+        if (!member.Occupied || !matchFlow.TryGetReviveTime(member.ClientId, out double reviveAtServerTime))
+            return default;
+
+        return new ReviveSnapshotSlot
+        {
+            ClientId = member.ClientId,
+            Pending = true,
+            ReviveAtServerTime = reviveAtServerTime
+        };
     }
 
     // 서버: 살아 있는 멤버 0명. 적 생성·AI를 멈춘다. 결과 공개·로비 복귀는 Ended 단계에서 처리한다.

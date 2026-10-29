@@ -170,6 +170,76 @@ public struct NetworkLobbySnapshot : INetworkSerializable, IEquatable<NetworkLob
     }
 }
 
+public struct ReviveSnapshotSlot : INetworkSerializable, IEquatable<ReviveSnapshotSlot>
+{
+    public ulong ClientId;
+    public bool Pending;
+    public double ReviveAtServerTime;
+
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref ClientId);
+        serializer.SerializeValue(ref Pending);
+        serializer.SerializeValue(ref ReviveAtServerTime);
+    }
+
+    public bool Equals(ReviveSnapshotSlot other)
+    {
+        return ClientId == other.ClientId && Pending == other.Pending &&
+               ReviveAtServerTime.Equals(other.ReviveAtServerTime);
+    }
+
+    public override bool Equals(object obj)
+    {
+        return obj is ReviveSnapshotSlot other && Equals(other);
+    }
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            int hash = ClientId.GetHashCode();
+            hash = (hash * 397) ^ Pending.GetHashCode();
+            return (hash * 397) ^ ReviveAtServerTime.GetHashCode();
+        }
+    }
+}
+
+public struct ReviveSnapshot : INetworkSerializable, IEquatable<ReviveSnapshot>
+{
+    public uint StartRevision;
+    public ReviveSnapshotSlot Member0;
+    public ReviveSnapshotSlot Member1;
+
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref StartRevision);
+        Member0.NetworkSerialize(serializer);
+        Member1.NetworkSerialize(serializer);
+    }
+
+    public bool Equals(ReviveSnapshot other)
+    {
+        return StartRevision == other.StartRevision && Member0.Equals(other.Member0) &&
+               Member1.Equals(other.Member1);
+    }
+
+    public override bool Equals(object obj)
+    {
+        return obj is ReviveSnapshot other && Equals(other);
+    }
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            int hash = (int)StartRevision;
+            hash = (hash * 397) ^ Member0.GetHashCode();
+            return (hash * 397) ^ Member1.GetHashCode();
+        }
+    }
+}
+
 public struct NetworkLobbyNotice : INetworkSerializable, IEquatable<NetworkLobbyNotice>
 {
     private uint roomId0;
@@ -240,6 +310,10 @@ public sealed class NetworkLobbyState : NetworkBehaviour
         default,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<ReviveSnapshot> reviveSnapshot = new NetworkVariable<ReviveSnapshot>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
     private readonly NetworkList<NetworkLobbyNotice> notices = new NetworkList<NetworkLobbyNotice>(
         null,
         NetworkVariableReadPermission.Everyone,
@@ -254,6 +328,7 @@ public sealed class NetworkLobbyState : NetworkBehaviour
     public event Action<MatchResult> MatchResultReceived;
 
     public NetworkLobbySnapshot Snapshot => snapshot.Value;
+    public ReviveSnapshot Revives => reviveSnapshot.Value;
     public NetworkList<NetworkLobbyNotice> Notices => notices;
     public bool CanStart => CanStartFromSnapshot(snapshot.Value);
 
@@ -294,6 +369,7 @@ public sealed class NetworkLobbyState : NetworkBehaviour
         initial.Member0 = new NetworkLobbyMemberSnapshot(hostClientId, normalizedName, -1, false, true, true, true);
         initial.Revision = 1;
         snapshot.Value = initial;
+        ClearRevives(initial.StartRevision);
         return true;
     }
 
@@ -363,6 +439,7 @@ public sealed class NetworkLobbyState : NetworkBehaviour
 
         current.Revision = NextNonZero(current.Revision);
         snapshot.Value = current;
+        ClearRevives(current.StartRevision);
         requestRates.Remove(clientId);
         AddNotice(current.RoomInstanceId, NetworkLobbyNoticeKind.Left, member.DisplayName);
         return true;
@@ -378,6 +455,7 @@ public sealed class NetworkLobbyState : NetworkBehaviour
         frozenSnapshot.StartRevision = NextNonZero(frozenSnapshot.StartRevision);
         frozenSnapshot.Revision = NextNonZero(frozenSnapshot.Revision);
         snapshot.Value = frozenSnapshot;
+        ClearRevives(frozenSnapshot.StartRevision);
         return true;
     }
 
@@ -390,6 +468,20 @@ public sealed class NetworkLobbyState : NetworkBehaviour
         current.Phase = NetworkLobbyPhase.Running;
         current.Revision = NextNonZero(current.Revision);
         snapshot.Value = current;
+        ClearRevives(current.StartRevision);
+        return true;
+    }
+
+    internal bool PublishRevives(ReviveSnapshot value)
+    {
+        if (!IsServer || !IsSpawned || snapshot.Value.Phase != NetworkLobbyPhase.Running ||
+            value.StartRevision != snapshot.Value.StartRevision)
+        {
+            return false;
+        }
+
+        if (!reviveSnapshot.Value.Equals(value))
+            reviveSnapshot.Value = value;
         return true;
     }
 
@@ -403,6 +495,7 @@ public sealed class NetworkLobbyState : NetworkBehaviour
         current.Phase = NetworkLobbyPhase.Ended;
         current.Revision = NextNonZero(current.Revision);
         snapshot.Value = current;
+        ClearRevives(current.StartRevision);
         try
         {
             MatchResultRpc(result);
@@ -429,6 +522,7 @@ public sealed class NetworkLobbyState : NetworkBehaviour
         current.Revision = NextNonZero(current.Revision);
         requestRates.Clear();
         snapshot.Value = current;
+        ClearRevives(current.StartRevision);
         return true;
     }
 
@@ -464,6 +558,16 @@ public sealed class NetworkLobbyState : NetworkBehaviour
         current.Phase = NetworkLobbyPhase.Stopping;
         current.Revision = NextNonZero(current.Revision);
         snapshot.Value = current;
+        ClearRevives(current.StartRevision);
+    }
+
+    private void ClearRevives(uint startRevision)
+    {
+        if (!IsServer || !IsSpawned) return;
+
+        ReviveSnapshot cleared = new ReviveSnapshot { StartRevision = startRevision };
+        if (!reviveSnapshot.Value.Equals(cleared))
+            reviveSnapshot.Value = cleared;
     }
 
     public void SelectChampion(PlayerCharacterId champion)

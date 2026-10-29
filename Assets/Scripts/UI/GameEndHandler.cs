@@ -8,12 +8,6 @@ public class GameEndHandler : MonoBehaviour
     private float combatStartTime;
     private bool ended;
 
-    private void Awake()
-    {
-        GameResult.Clear();
-        ended = false;
-    }
-
     private void OnEnable()
     {
         GameManager.OnLocalPlayerChanged += BindPlayer;
@@ -54,11 +48,12 @@ public class GameEndHandler : MonoBehaviour
         ended = true;
 
         GameObject player = stateManager.gameObject;
-        GameResult.Data = new MatchResult
+        MatchResult result = new MatchResult
         {
             MatchSeconds = Time.time - combatStartTime,
             Players = new[] { PlayerResult.Capture(player, LocalPlayerProfile.LoadDisplayName(), 0) }
         };
         GameManager.Instance?.NotifyPlayerUnavailable(player);
+        GameResult.Data = result;
     }
 }

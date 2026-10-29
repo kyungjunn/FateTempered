@@ -8,6 +8,9 @@ using UnityEngine.SceneManagement;
 // 전투 세션 소유자. 시작·종료·현재 플레이어.
 public class GameManager : MonoBehaviour
 {
+    private const string OfflineGameSceneName = "InGame";
+    private const string OfflineMenuSceneName = "NetworkEntry";
+
     public static GameManager Instance;
     public static event Action<GameObject> OnLocalPlayerChanged;
     private static int nextSessionId = 1;
@@ -18,6 +21,7 @@ public class GameManager : MonoBehaviour
     private UIManager startupUIManager;
     private bool startupCancelled;
     private bool networkCombatMode;
+    private bool offlineNavigationInProgress;
 
     public int SessionId { get; private set; }
     public GameObject CurrentPlayer => currentPlayer;
@@ -76,6 +80,7 @@ public class GameManager : MonoBehaviour
             StartCoroutine(NetworkLoadingRoutine());
             return;
         }
+        GameResult.Clear();
         StartCoroutine(LoadMapAndSpawnRoutine());
     }
 
@@ -144,10 +149,11 @@ public class GameManager : MonoBehaviour
         finally
         {
             SetCurrentPlayer(null);
+            bool offlineSession = !NetworkGameSession.IsNetworkSessionActive && !networkCombatMode;
             if (!NetworkGameSession.IsNetworkSessionActive)
                 networkCombatMode = false;
+            if (offlineSession) Time.timeScale = 1f;
             IsPaused = false;
-            Time.timeScale = 1f;
             SetCursor(true);
         }
     }
@@ -185,6 +191,65 @@ public class GameManager : MonoBehaviour
     public void NotifyPlayerUnavailable(GameObject player)
     {
         UnregisterLocalPlayer(player);
+    }
+
+    public void RestartOfflineMatch()
+    {
+        NavigateFromOfflineResult(OfflineGameSceneName);
+    }
+
+    public void ReturnOfflineToMenu()
+    {
+        NavigateFromOfflineResult(OfflineMenuSceneName);
+    }
+
+    private void NavigateFromOfflineResult(string sceneName)
+    {
+        if (Instance != this || !isActiveAndEnabled || NetworkGameSession.IsNetworkSessionActive ||
+            networkCombatMode || SessionId != 0 || !GameResult.Data.HasValue || offlineNavigationInProgress)
+        {
+            return;
+        }
+
+        if (!Application.CanStreamedLevelBeLoaded(sceneName))
+        {
+            Debug.LogError("오프라인 결과 씬을 불러올 수 없습니다: " + sceneName, this);
+            return;
+        }
+
+        offlineNavigationInProgress = true;
+        StartCoroutine(NavigateOfflineAfterCleanup(sceneName));
+    }
+
+    private IEnumerator NavigateOfflineAfterCleanup(string sceneName)
+    {
+        EndCombatSession(SessionId);
+
+        AugmentResourceLoader loader = resourceLoader != null ? resourceLoader : AugmentResourceLoader.Instance;
+        if (loader != null)
+            yield return loader.WaitForRelease();
+
+        AsyncOperation sceneLoad;
+        try
+        {
+            sceneLoad = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
+        }
+        catch (Exception exception)
+        {
+            offlineNavigationInProgress = false;
+            Debug.LogException(exception, this);
+            yield break;
+        }
+
+        if (sceneLoad == null)
+        {
+            offlineNavigationInProgress = false;
+            Debug.LogError("오프라인 결과 씬 로드를 시작하지 못했습니다: " + sceneName, this);
+            yield break;
+        }
+
+        while (!sceneLoad.isDone)
+            yield return null;
     }
 
     public bool RegisterLocalPlayer(GameObject player)
@@ -266,7 +331,6 @@ public class GameManager : MonoBehaviour
         mapScene = map;
         SessionId = nextSessionId++;
         IsPaused = false;
-        Time.timeScale = 1f;
         return true;
     }
 

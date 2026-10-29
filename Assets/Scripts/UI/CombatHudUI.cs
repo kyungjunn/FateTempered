@@ -69,9 +69,16 @@ public sealed class CombatHudUI : MonoBehaviour
 
     private void Update()
     {
-        // Tab: 능력치 패널 토글. 쿨타임: 매 프레임 표시 갱신.
-        if (Keyboard.current != null && Keyboard.current.tabKey.wasPressedThisFrame)
+        // 결과 화면에서는 Tab이 능력치 패널을 다시 열지 않도록 닫아 둔다.
+        NetworkGameSession session = NetworkGameSession.Instance;
+        bool matchEnded = (session != null && session.State == NetworkGameSessionState.Ended) ||
+                          GameResult.Data.HasValue;
+        if (matchEnded)
+            statsPanel.SetActive(false);
+        else if (Keyboard.current != null && Keyboard.current.tabKey.wasPressedThisFrame)
             statsPanel.SetActive(!statsPanel.activeSelf);
+
+        // 쿨타임: 매 프레임 표시 갱신.
         RefreshSkills();
         bool recast = skills != null && skills.UltimateRecastReady;
         // 궁극기 충전 완료 또는 재시전 가능 시 강조색 적용.
